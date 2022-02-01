@@ -10,7 +10,7 @@ on:
 
 jobs:
   tests:
-    name: Build & Test on ${{matrix.os}}
+    name: Build & Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -41,6 +41,17 @@ jobs:
           go version
           go test -race ./...
 
+      - id: results
+        run: |
+          id=$(echo ${{ github.event.after }} | cut -c -8)
+          echo "::set-output name=id::$id"
+
+          if [[ "${{ job.status }}" == succes ]]; then
+            echo "::set-output name=result:::moneybag: SUCCESS"
+          else
+            echo "::set-output name=result:::hankey: FAILURE"
+          fi          
+
       - name: Post to Slack
         id: slack
         uses: slackapi/slack-github-action@v1.16.0
@@ -56,7 +67,7 @@ jobs:
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ job.status }}"
+                    "text": "${{ steps.results.outputs.id }}"
                   }
                 },
                 {
@@ -64,19 +75,27 @@ jobs:
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*Repo:* ${{ github.repository }}\n"
+                      "text": "*Repo:* `${{ github.repository }}`"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Branch:* ${{ github.ref_name }}\n"
+                      "text": "*Branch:* `${{ github.ref_name }} (${{ github.ref }})`"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Revision:* ${{ github.event.after }}"
+                      "text": "*Revision:* `${{ steps.results.outputs.id }}`"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Committer:* ${{ github.actor }}"
+                      "text": "*Committer:* `${{ github.actor }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Go Version:* `${{ matrix.go-version }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*OS:* `${{ matrix.os }}`"
                     }
                   ]
                 }
