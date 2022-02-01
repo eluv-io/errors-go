@@ -1,11 +1,6 @@
 name: Build & Test
 
-on:
-  push:
-  pull_request:
-    branches:
-      - master
-
+on: [push]
 jobs:
   tests:
     name: Build & Test on ${{ matrix.os }}
@@ -25,9 +20,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Print Go version
-        run: go version
-
       - name: Get dependencies
         run: go get -v -t -d ./...
 
@@ -36,15 +28,22 @@ jobs:
 
       - name: Run tests
         run: |
-          go version
+          
           go test -race ./...
 
       - id: results
+        shell: bash
         run: |
           id=$(echo ${{ github.event.after }} | cut -c -8)
-          echo "::set-output name=id::$id"
+          echo "::set-output name=rev::$id"
 
-          if [[ "${{ job.status }}" == succes ]]; then
+          id=$(uname -sr)
+          echo "::set-output name=os::$id"
+
+          id=$(go version | cut -d " " -f 3-)
+          echo "::set-output name=go_version::$id"
+
+          if [[ "${{ job.status }}" == "success" ]]; then
             echo "::set-output name=status:::moneybag: SUCCESS"
           else
             echo "::set-output name=status:::hankey: FAILURE"
@@ -60,6 +59,7 @@ jobs:
           # For posting a rich message using Block Kit
           payload: |
             {
+              "text": "GitHub Action build result: ${{ job.status }}\n${{ github.event.head_commit.url }}",
               "blocks": [
                 {
                   "type": "header",
@@ -77,11 +77,11 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Branch:* [${{ github.event.ref }}](${{ github.event.pull_request.html_url || github.event.head_commit.url }})"
+                      "text": "*Branch:* [${{ github.event.ref }}](${{ github.event.head_commit.url }})"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Revision:* `${{ steps.results.outputs.id }}`"
+                      "text": "*Revision:* `${{ steps.results.outputs.rev }}`"
                     },
                     {
                       "type": "mrkdwn",
@@ -89,11 +89,11 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Go Version:* `${{ matrix.go-version }}`"
+                      "text": "*Go Version:* `${{ steps.results.outputs.go_version }}`"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*OS:* `${{ matrix.os }}`"
+                      "text": "*OS:* `${{ steps.results.outputs.os }}`"
                     }
                   ]
                 }
