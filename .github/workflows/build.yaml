@@ -1,6 +1,6 @@
 name: Build & Test
 
-on: [push]
+on: [ push ]
 jobs:
   tests:
     name: Build & Test on ${{ matrix.os }}
@@ -77,7 +77,7 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Branch:* [${{ github.event.ref }}](${{ github.event.head_commit.url }})"
+                      "text": "*Branch:* `${{ github.event.ref_name }}`"
                     },
                     {
                       "type": "mrkdwn",
@@ -94,6 +94,29 @@ jobs:
                     {
                       "type": "mrkdwn",
                       "text": "*OS:* `${{ steps.results.outputs.os }}`"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Build log",
+                        "emoji": true
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    },
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Commit Log",
+                        "emoji": true
+                      },
+                      "url": "${{ github.event.head_commit.url }}"
                     }
                   ]
                 }
