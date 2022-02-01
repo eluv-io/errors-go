@@ -103,7 +103,7 @@ jobs:
                         "text": "Build log",
                         "emoji": true
                       },
-                      "url": "${{ github.server_url }}/${{ github.repository }}/runs/${{ github.job }}?check_suite_focus=true"
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                     },
                     {
                       "type": "button",
