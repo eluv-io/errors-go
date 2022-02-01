@@ -14,8 +14,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest]
-        go-version: [1.17.x]
+        os: [ macos-latest, ubuntu-latest ]
+        go-version: [ 1.17.x ]
     steps:
       - name: Install Go
         uses: actions/setup-go@v2
@@ -40,3 +40,47 @@ jobs:
         run: |
           go version
           go test -race ./...
+
+      - name: Post to Slack
+        id: slack
+        uses: slackapi/slack-github-action@v1.16.0
+        with:
+          # Slack channel id, channel name, or user id to post message.
+          # See also: https://api.slack.com/methods/chat.postMessage#channels
+          channel-id: 'CCFC9EWH2'
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ job.status }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repo:* ${{ github.repository }}\n"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:* ${{ github.ref_name }}\n"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Revision:* ${{ github.event.after }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Committer:* ${{ github.actor }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
