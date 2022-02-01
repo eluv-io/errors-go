@@ -6,12 +6,15 @@ import (
 	"strings"
 )
 
-// Append appends the given errs to err.
+// Append appends one or multiple errors `errs` to the *ErrorList err and returns the updated error list.
 //
-// If err is not a *ErrorList, then a new one is created and err added to it. Then all additional errs are appended,
-// unwrapping them if any of them are ErrorLists themselves.
+// If err is not an *ErrorList (any other type of error or nil), then a new list is created and err added to it. Then
+// all additional errs are appended, unwrapping them if any of them are ErrorLists themselves.
 //
-// Any nil errors within errs will be ignored. If err is nil, a new *ErrorList will be returned.
+// Any nil errors within errs will be ignored. If the final list contains a single error, the error is returned instead
+// of the list.
+//
+//
 func Append(err error, errs ...error) error {
 	for _, e := range errs {
 		if e != nil {

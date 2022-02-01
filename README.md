@@ -1,5 +1,8 @@
 # Error Handling with `eluv-io/errors-go`
 
+[![](https://github.com/eluv-io/errors-go/actions/workflows/build.yaml/badge.svg)](https://github.com/eluv-io/errors-go/actions?query=workflow%3Abuild)
+[![CodeQL](https://github.com/eluv-io/errors-go/actions/workflows/codeql-analysis.yaml/badge.svg)](https://github.com/eluv-io/errors-go/actions/workflows/codeql-analysis.yaml)
+
 The package `eluv-io/errors-go` makes Go error handling simple, intuitive and effective.
 
 ```go
@@ -155,6 +158,52 @@ The following functions allow to suppress or remove stack traces from an `Error`
 * `Error.ClearStacktrace()`
 
 In addition, stack trace recording can be completely disabled at compile time with the `errnostack` build tag. 
+
+## Error Lists with `Append()`
+
+The `Append()` function allows collecting multiple errors in an error list and treat that list as a regular `error`:
+
+```go
+func processBatch(items []work) error {
+	var errs error
+	for idx, item := range items {
+		err := item.Execute()
+		if err != nil {
+			errs = errors.Append(errs, errors.E(err, "item", idx)
+		}
+	}
+	return errs
+}
+```
+
+`errors.Append(list, err)` appends a given error (or multiple errors) to an error list. The list itself can start out as nil or an initial regular `error`, in which case the function appends the errors to a new `errors.List` and returns the list.
+
+An error list's string representation includes all appended errors:
+
+```
+error-list count [2]
+    0: op [read] kind [I/O error] cause [EOF]
+    1: op [write] kind [operation cancelled]
+```
+
+With stack traces:
+
+```
+error-list count [2]
+    0: op [read] kind [I/O error] cause [EOF]
+    github.com/eluv-io/errors-go/list_test.go:192 ExampleAppend()
+    testing/run_example.go:64                     runExample()
+    testing/example.go:44                         runExamples()
+    testing/testing.go:1505                       (*M).Run()
+    _testmain.go:165                              main()
+
+    1: op [write] kind [operation cancelled]
+    github.com/eluv-io/errors-go/list_test.go:192 ExampleAppend()
+    testing/run_example.go:64                     runExample()
+    testing/example.go:44                         runExamples()
+    testing/testing.go:1505                       (*M).Run()
+    _testmain.go:165                              main()
+```
 
 ## Integration with `eluv-io/log-go`
 
