@@ -2,8 +2,6 @@ name: Build & Test
 
 on:
   push:
-    branches:
-      - master
   pull_request:
     branches:
       - master
@@ -47,9 +45,9 @@ jobs:
           echo "::set-output name=id::$id"
 
           if [[ "${{ job.status }}" == succes ]]; then
-            echo "::set-output name=result:::moneybag: SUCCESS"
+            echo "::set-output name=status:::moneybag: SUCCESS"
           else
-            echo "::set-output name=result:::hankey: FAILURE"
+            echo "::set-output name=status:::hankey: FAILURE"
           fi          
 
       - name: Post to Slack
@@ -67,7 +65,7 @@ jobs:
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ steps.results.outputs.id }}"
+                    "text": "${{ steps.results.outputs.status }}"
                   }
                 },
                 {
@@ -75,11 +73,11 @@ jobs:
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*Repo:* `${{ github.repository }}`"
+                      "text": "*Repository:* `${{ github.repository }}`"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Branch:* `${{ github.ref_name }} (${{ github.ref }})`"
+                      "text": "*Branch:* [${{ github.event.ref }}](${{ github.event.pull_request.html_url || github.event.head_commit.url }})"
                     },
                     {
                       "type": "mrkdwn",
