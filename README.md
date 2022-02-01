@@ -1,5 +1,7 @@
 # Error Handling with `eluv-io/errors-go`
 
+[![](https://github.com/eluv-io/errors-go/actions/workflows/build.yaml/badge.svg)](https://github.com/eluv-io/errors-go/actions?query=workflow%3Abuild)
+
 The package `eluv-io/errors-go` makes Go error handling simple, intuitive and effective.
 
 ```go
