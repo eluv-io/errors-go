@@ -27,27 +27,23 @@ jobs:
         run: go build ./...
 
       - name: Run tests
-        run: |
-          
-          go test -race ./...
+        run: go test -race ./...
 
       - id: results
         shell: bash
+        env:
+          FULL_REVISION: ${{ github.event.after }}
         run: |
-          id=$(echo ${{ github.event.after }} | cut -c -8)
-          echo "::set-output name=rev::$id"
-
-          id=$(uname -sr)
-          echo "::set-output name=os::$id"
-
-          id=$(go version | cut -d " " -f 3-)
-          echo "::set-output name=go_version::$id"
+          echo "::set-output name=rev::${FULL_REVISION:0:8}"
+          echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
+          echo "::set-output name=os::$(uname -sr)"
+          echo "::set-output name=go_version::$(go version | cut -d " " -f 3-)"
 
           if [[ "${{ job.status }}" == "success" ]]; then
             echo "::set-output name=status:::moneybag: SUCCESS"
           else
             echo "::set-output name=status:::hankey: FAILURE"
-          fi          
+          fi
 
       - name: Post to Slack
         id: slack
@@ -77,7 +73,7 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Branch:* `${{ github.event.ref_name }}`"
+                      "text": "*Branch:* `${{ steps.results.outputs.branch }}`"
                     },
                     {
                       "type": "mrkdwn",
@@ -113,7 +109,7 @@ jobs:
                       "type": "button",
                       "text": {
                         "type": "plain_text",
-                        "text": "Commit Log",
+                        "text": "Commit Details",
                         "emoji": true
                       },
                       "url": "${{ github.event.head_commit.url }}"
