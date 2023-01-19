@@ -1,6 +1,7 @@
 package errors_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"regexp"
@@ -8,9 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/eluv-io/stack"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/eluv-io/stack"
 
 	"github.com/eluv-io/errors-go"
 )
@@ -22,7 +24,7 @@ var errorLines = strings.Split(`
 \tgithub.com/eluv-io/errors-go/stack_test.go:\d+\s+T.func3\(\)
 \tgithub.com/eluv-io/errors-go/stack_test.go:\d+\s+T.func2\(\)
 \tgithub.com/eluv-io/errors-go/stack_test.go:\d+\s+func1\(\)
-\tgithub.com/eluv-io/errors-go/stack_test.go:\d+\s+TestStack.func1\(\)
+\tgithub.com/eluv-io/errors-go/stack_test.go:\d+\s+TestStack\S+\(\)
 `[1:], "\n")
 
 var errorLineREs = make([]*regexp.Regexp, len(errorLines))
@@ -47,6 +49,36 @@ func TestStack(t *testing.T) {
 			validateStacktrace(t, func1(true).Error())
 		})
 	}
+}
+
+// TestStackArray is like TestStack, but sets MarshalStacktraceAsArray to true and validates that the marshaled error
+// contains the stacktrace as array.
+func TestStackArray(t *testing.T) {
+	revert := enableMarshalStacktraceAsArray()
+	defer revert()
+
+	validate := func(target error) {
+		marshaled, err := json.Marshal(target)
+		require.NoError(t, err)
+
+		fmt.Println(string(marshaled))
+
+		var m map[string]interface{}
+		err = json.Unmarshal(marshaled, &m)
+		require.NoError(t, err)
+
+		trace, ok := m["stacktrace"]
+		require.True(t, ok)
+
+		for i, s := range trace.([]interface{}) {
+			line := "\t" + s.(string)
+			re := errorLineREs[i]
+			require.True(t, re.MatchString(line), "line [%s] regex [%s]", line, re)
+		}
+	}
+
+	validate(func1(false))
+	validate(func1(true))
 }
 
 func TestClearStacktrace(t *testing.T) {
@@ -87,7 +119,7 @@ func validateStacktrace(t *testing.T, got string) {
 }
 
 /*
-  func1 causes an error of the form:
+func1 causes an error of the form:
 
 	op [some operation] Kind [unclassified error] cause:
 		op [GetKey] Kind [unclassified error] cause:

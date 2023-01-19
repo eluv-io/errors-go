@@ -9,13 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/eluv-io/errors-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/eluv-io/errors-go"
 )
 
 func init() {
 	errors.PrintStacktrace = false
+	errors.MarshalStacktraceAsArray = false
 }
 
 func TestE(t *testing.T) {
@@ -649,7 +651,7 @@ func TestError_MarshalJSON(t *testing.T) {
 					// original errors...
 					// require.Equal(t, e1, e2)
 
-					// therefore, make sure that at lest the string representation - without
+					// therefore, make sure that at least the string representation - without
 					// stacktrace - is equal.
 
 					require.Equal(t, e1.ErrorNoTrace(), e2.ErrorNoTrace())
@@ -936,6 +938,16 @@ func enableStacktraces() func() {
 	return func() {
 		errors.PrintStacktrace = ps
 		errors.PrintStacktracePretty = psp
+	}
+}
+
+func enableMarshalStacktraceAsArray() func() {
+	revert := enableStacktraces()
+	msa := errors.MarshalStacktraceAsArray
+	errors.MarshalStacktraceAsArray = true
+	return func() {
+		revert()
+		errors.MarshalStacktraceAsArray = msa
 	}
 }
 
