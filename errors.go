@@ -523,6 +523,22 @@ func (t TemplateFn) Add(fields ...interface{}) TemplateFn {
 	}
 }
 
+// Fields returns the fields of the template, excluding "op", "kind" and "cause". This is useful in situations where
+// the same information is used for logging and in errors.
+func (t TemplateFn) Fields() []interface{} {
+	return t().fields
+}
+
+// String returns a string representation of this template.
+func (t TemplateFn) String() string {
+	return t().Error()
+}
+
+// MarshalJSON marshals this template to JSON.
+func (t TemplateFn) MarshalJSON() ([]byte, error) {
+	return t().MarshalJSON()
+}
+
 type TFn func(err error, fields ...interface{}) error
 
 // Error returns the string presentation of this Error. Fields are ordered according to DefaultFieldOrder. The

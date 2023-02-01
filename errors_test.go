@@ -661,6 +661,12 @@ func TestError_MarshalJSON(t *testing.T) {
 	}
 }
 
+func TestError_MarshalJSON_StackAsArray(t *testing.T) {
+	revert := enableMarshalStacktraceAsArray()
+	defer revert()
+	TestError_MarshalJSON(t)
+}
+
 func TestTemplate(t *testing.T) {
 	for _, template := range []func(fields ...interface{}) errors.TemplateFn{errors.Template, errors.T} {
 		fn := func(cause error) error {
@@ -700,7 +706,13 @@ func TestTemplateNoTrace(t *testing.T) {
 	}
 }
 
-func TestTemplateAdd(t *testing.T) {
+func TestTemplateFn_IfNotNil(t *testing.T) {
+	e := errors.TemplateNoTrace("op1", errors.K.Invalid)
+	require.Equal(t, nil, e.IfNotNil(nil))
+	require.Equal(t, e(io.EOF), e.IfNotNil(io.EOF))
+}
+
+func TestTemplateFn_Add(t *testing.T) {
 	e := errors.Template("op", errors.K.IO, "k1", "v1")
 	e = e.Add("k1", "v1.override", "k2", "v2", errors.K.Invalid)
 	err := e("k3", "v3", io.EOF)
@@ -708,6 +720,48 @@ func TestTemplateAdd(t *testing.T) {
 	assert.Equal(t,
 		errors.E("op", "k1", "v1.override", "k2", "v2", "k3", "v3", errors.K.Invalid, io.EOF).ClearStacktrace(),
 		err.ClearStacktrace())
+}
+
+func TestTemplateFn_Fields(t *testing.T) {
+	tests := []struct {
+		e    errors.TemplateFn
+		want []interface{}
+	}{
+		{
+			errors.Template(),
+			nil,
+		},
+		{
+			errors.Template("operation 1", errors.K.Invalid, io.EOF),
+			[]interface{}{},
+		},
+		{
+			errors.Template("operation 1", errors.K.Invalid, io.EOF, "k1", "v1"),
+			[]interface{}{"k1", "v1"},
+		},
+		{
+			errors.Template("operation 1", "k1", "v1", "k2", "v2"),
+			[]interface{}{"k1", "v1", "k2", "v2"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprint(test.e()), func(t *testing.T) {
+			require.Equal(t, test.want, test.e.Fields())
+		})
+	}
+}
+
+func TestTemplateFn_String(t *testing.T) {
+	e := errors.TemplateNoTrace("op", errors.K.IO, "k1", "v1")
+	require.Equal(t, `op [op] kind [I/O error] k1 [v1]`, e.String())
+}
+
+func TestTemplateFn_MarshalJSON(t *testing.T) {
+	e := errors.TemplateNoTrace("op", errors.K.IO, "k1", "v1")
+	jsn, err := json.Marshal(e)
+	require.NoError(t, err)
+	require.Equal(t, `{"op":"op","kind":"I/O error","k1":"v1"}`, string(jsn))
 }
 
 func TestDefaultKind(t *testing.T) {
