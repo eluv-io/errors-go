@@ -29,7 +29,7 @@ func ExampleE() {
 	defer reset()
 
 	err := getConfig()
-	fmt.Println(deleteLastLine(err.Error()))
+	fmt.Println(deleteLastLines(err.Error(), "ExampleE()"))
 
 	// Output:
 	//
@@ -39,16 +39,20 @@ func ExampleE() {
 	//	github.com/eluv-io/errors-go/stack_example_test.go:20 getConfig()
 	//	github.com/eluv-io/errors-go/stack_example_test.go:22 getConfig()
 	//	github.com/eluv-io/errors-go/stack_example_test.go:31 ExampleE()
-	//	testing/run_example.go:64                             runExample()
-	//	testing/example.go:44                                 runExamples()
-	//	testing/testing.go:1505                               (*M).Run()
 }
 
-func deleteLastLine(s string) string {
+func deleteLastLines(s string, match string) string {
 	s = strings.TrimRight(s, "\n")
-	pos := strings.LastIndexByte(s, '\n')
-	if pos >= 0 {
-		return s[:pos]
+	for {
+		pos := strings.LastIndexByte(s, '\n')
+		if pos >= 0 {
+			if strings.Contains(s[pos:], match) {
+				break
+			}
+			s = s[:pos]
+		} else {
+			break
+		}
 	}
 	return s
 }

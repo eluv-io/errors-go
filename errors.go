@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 )
 
 // PopulateStacktrace controls whether stacktraces are captured on error creation per default or not. This is
@@ -21,32 +22,36 @@ var PrintStacktrace = true
 //
 // Pretty print:
 //
-// 	github.com/eluv-io/errors-go/stack_with_long_filename_test.go:6 createErrorWithExtraLongFilename()
-// 	github.com/eluv-io/errors-go/stack_test.go:108                  func4()
-// 	github.com/eluv-io/errors-go/stack_test.go:109                  func4()
-// 	github.com/eluv-io/errors-go/stack_test.go:104                  T.func3()
-// 	github.com/eluv-io/errors-go/stack_test.go:99                   T.func2()
-// 	github.com/eluv-io/errors-go/stack_test.go:90                   func1()
-// 	github.com/eluv-io/errors-go/stack_test.go:47                   TestStack()
-// 	testing/testing.go:909                                          tRunner()
-// 	runtime/asm_amd64.s:1357                                        goexit()
+//	github.com/eluv-io/errors-go/stack_with_long_filename_test.go:6 createErrorWithExtraLongFilename()
+//	github.com/eluv-io/errors-go/stack_test.go:108                  func4()
+//	github.com/eluv-io/errors-go/stack_test.go:109                  func4()
+//	github.com/eluv-io/errors-go/stack_test.go:104                  T.func3()
+//	github.com/eluv-io/errors-go/stack_test.go:99                   T.func2()
+//	github.com/eluv-io/errors-go/stack_test.go:90                   func1()
+//	github.com/eluv-io/errors-go/stack_test.go:47                   TestStack()
+//	testing/testing.go:909                                          tRunner()
+//	runtime/asm_amd64.s:1357                                        goexit()
 //
 // Regular:
 //
-// 	github.com/eluv-io/errors-go/stack_with_long_filename_test.go:6	createErrorWithExtraLongFilename()
-// 	github.com/eluv-io/errors-go/stack_test.go:108	func4()
-// 	github.com/eluv-io/errors-go/stack_test.go:109	func4()
-// 	github.com/eluv-io/errors-go/stack_test.go:104	T.func3()
-// 	github.com/eluv-io/errors-go/stack_test.go:99	T.func2()
-// 	github.com/eluv-io/errors-go/stack_test.go:90	func1()
-// 	github.com/eluv-io/errors-go/stack_test.go:47	TestStack()
-// 	testing/testing.go:909	tRunner()
-// 	runtime/asm_amd64.s:1357	goexit()
+//	github.com/eluv-io/errors-go/stack_with_long_filename_test.go:6	createErrorWithExtraLongFilename()
+//	github.com/eluv-io/errors-go/stack_test.go:108	func4()
+//	github.com/eluv-io/errors-go/stack_test.go:109	func4()
+//	github.com/eluv-io/errors-go/stack_test.go:104	T.func3()
+//	github.com/eluv-io/errors-go/stack_test.go:99	T.func2()
+//	github.com/eluv-io/errors-go/stack_test.go:90	func1()
+//	github.com/eluv-io/errors-go/stack_test.go:47	TestStack()
+//	testing/testing.go:909	tRunner()
+//	runtime/asm_amd64.s:1357	goexit()
 var PrintStacktracePretty = true
 
 // MarshalStacktrace controls whether stacktraces are marshaled to JSON or not. If enabled, an extra "stacktrace" field
 // is added to the error's JSON struct.
 var MarshalStacktrace = true
+
+// MarshalStacktraceAsArray controls whether stacktraces are marshaled to JSON as a single string blob or as JSON array
+// containing the individual lines of the stacktrace.
+var MarshalStacktraceAsArray = true
 
 // DefaultFieldOrder defines the default order of an Error's fields in its String and JSON representations.
 //
@@ -139,7 +144,11 @@ func (e *Error) marshalFields(marshalStack bool) (res []byte, err error) {
 	if marshalStack && MarshalStacktrace && !e.ignoreStack && e.hasStack() {
 		bb := new(bytes.Buffer)
 		e.printStack(bb)
-		err = kv("stacktrace", bb.String())
+		if MarshalStacktraceAsArray {
+			err = kv("stacktrace", stacktraceToArray(bb.String()))
+		} else {
+			err = kv("stacktrace", bb.String())
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -148,6 +157,20 @@ func (e *Error) marshalFields(marshalStack bool) (res []byte, err error) {
 	b.WriteByte('}')
 
 	return b.Bytes(), nil
+}
+
+func stacktraceToArray(s string) []string {
+	// trim empty lines or lines containing only whitespace
+	s = strings.Trim(s, "\n\t ")
+	if s == "" {
+		return []string{}
+	}
+
+	res := strings.Split(s, "\n")
+	for i, line := range res {
+		res[i] = strings.Trim(line, "\t\n ")
+	}
+	return res
 }
 
 // UnmarshalJSON unmarshals the given JSON text, retaining the order of fields according to the JSON structure.
@@ -171,7 +194,20 @@ func (e *Error) unmarshalFrom(f map[orderedKey]valOrMap) {
 	for _, key := range keys {
 		val := f[key].Get()
 		if key.key == "stacktrace" {
-			e.unmarshalledStacktrace = toString(val)
+			slice, ok := val.([]interface{})
+			if ok {
+				sb := strings.Builder{}
+				for _, line := range slice {
+					if sb.Len() > 0 {
+						sb.WriteString("\n")
+					}
+					sb.WriteString("\t")
+					sb.WriteString(toString(line))
+				}
+				e.unmarshalledStacktrace = sb.String()
+			} else {
+				e.unmarshalledStacktrace = toString(val)
+			}
 		} else {
 			_ = e.With(key.key, val)
 		}
@@ -391,13 +427,13 @@ var Separator = ":\n\t"
 // the error itself.
 //
 // Examples:
-//   errors.E()                                    --> error with kind set to errors.K.Other, all other fields empty
-//   errors.E("download")                   --> same as errors.E().WithOp("download")
-//   errors.E("download", errors.K.IO)      --> same as errors.E().WithOp("download").WithKind(errors.K.IO)
-//   errors.E("download", errors.K.IO, err) --> same as errors.E().WithOp("download").WithKind(errors.K.IO).WithCause(err)
-//   errors.E("download", errors.K.IO, err, "file", f, "user", usr) --> same as errors.E()...With("file", f).With("user", usr)
-//   errors.E(errors.K.NotExist, "file", f)        --> same as errors.E().WithKind(errors.K.NotExist).With("file", f)
 //
+//	errors.E()                             --> error with kind set to errors.K.Other, all other fields empty
+//	errors.E("download")                   --> same as errors.E().WithOp("download")
+//	errors.E("download", errors.K.IO)      --> same as errors.E().WithOp("download").WithKind(errors.K.IO)
+//	errors.E("download", errors.K.IO, err) --> same as errors.E().WithOp("download").WithKind(errors.K.IO).WithCause(err)
+//	errors.E("download", errors.K.IO, err, "file", f, "user", usr) --> same as errors.E()...With("file", f).With("user", usr)
+//	errors.E(errors.K.NotExist, "file", f) --> same as errors.E().WithKind(errors.K.NotExist).With("file", f)
 func E(args ...interface{}) *Error {
 	e := NoTrace(args...)
 
@@ -438,15 +474,15 @@ func NoTrace(args ...interface{}) *Error {
 // Template returns a function that creates a base error with an initial set of fields. When called, additional fields
 // can be passed that complement the error template:
 //
-//   e := errors.Template("unmarshal", K.Invalid)
-//   ...
-//   if invalid {
-//     return e("reason", "invalid format")
-//   }
-//   ...
-//   if err != nil {
-//     return e(err)
-//   }
+//	e := errors.Template("unmarshal", K.Invalid)
+//	...
+//	if invalid {
+//	  return e("reason", "invalid format")
+//	}
+//	...
+//	if err != nil {
+//	  return e(err)
+//	}
 func Template(fields ...interface{}) TemplateFn {
 	return func(f ...interface{}) *Error {
 		return E(append(fields, f...)...).dropStackFrames(1)
@@ -485,6 +521,22 @@ func (t TemplateFn) Add(fields ...interface{}) TemplateFn {
 	return func(f ...interface{}) *Error {
 		return t(append(fields, f...)...)
 	}
+}
+
+// Fields returns the fields of the template, excluding "op", "kind" and "cause". This is useful in situations where
+// the same information is used for logging and in errors.
+func (t TemplateFn) Fields() []interface{} {
+	return t().fields
+}
+
+// String returns a string representation of this template.
+func (t TemplateFn) String() string {
+	return t().Error()
+}
+
+// MarshalJSON marshals this template to JSON.
+func (t TemplateFn) MarshalJSON() ([]byte, error) {
+	return t().MarshalJSON()
 }
 
 type TFn func(err error, fields ...interface{}) error
@@ -647,7 +699,9 @@ func Str(text string) error {
 // Error methods. Elements that are in the second argument but not present in the first are ignored.
 //
 // For example:
+//
 //	Match(errors.E("authorize", errors.Permission), err)
+//
 // tests whether err is an Error with op=authorize and kind=Permission.
 func Match(err1, err2 error) bool {
 	if err1 == nil {
@@ -756,6 +810,7 @@ func GetRootCause(err error) error {
 // generic errors created with Str(s). Empty objects or strings are ignored.
 //
 // The exact JSON structure is:
+//
 //	{
 //	  "errors": [
 //		{"op": "op1"},
@@ -784,9 +839,12 @@ func ClearStacktrace(err error) error {
 // Ignore simply ignores a potential error returned by the given function.
 //
 // Useful in defer statements where the deferred function returns an error, i.e.
-//   defer writer.Close()
+//
+//	defer writer.Close()
+//
 // can be written as
-//   defer errors.Ignore(writer.Close)
+//
+//	defer errors.Ignore(writer.Close)
 func Ignore(f func() error) {
 	if f == nil {
 		return
@@ -811,10 +869,10 @@ func Wrap(err error, args ...interface{}) *Error {
 }
 
 // FromContext creates an error from the given context and additional error arguments as passed to E(). It returns
-//  * nil if ctx.Err() returns nil
-//  * an error from the given args and kind Timeout if the ctx timed out
-//  * an error from the given args and kind Cancelled if the ctx was cancelled
-//  * an error from the given args and the cause set to ctx.Err() otherwise.
+//   - nil if ctx.Err() returns nil
+//   - an error from the given args and kind Timeout if the ctx timed out
+//   - an error from the given args and kind Cancelled if the ctx was cancelled
+//   - an error from the given args and the cause set to ctx.Err() otherwise.
 func FromContext(ctx context.Context, args ...interface{}) *Error {
 	if ctx == nil {
 		return nil
