@@ -519,14 +519,14 @@ func (t TemplateFn) IfNotNil(err error, fields ...interface{}) error {
 // Add adds additional fields to this template.
 func (t TemplateFn) Add(fields ...interface{}) TemplateFn {
 	return func(f ...interface{}) *Error {
-		return t(append(fields, f...)...)
+		return t(append(fields, f...)...).dropStackFrames(1)
 	}
 }
 
-// Fields returns the fields of the template, excluding "op", "kind" and "cause". This is useful in situations where
-// the same information is used for logging and in errors.
-func (t TemplateFn) Fields() []interface{} {
-	return t().fields
+// Fields returns the fields of the template, excluding "op", "kind" and "cause", appended with the given fields. This
+// is useful in situations where the same information is used for logging and in errors.
+func (t TemplateFn) Fields(moreFields ...interface{}) []interface{} {
+	return append(t().fields, moreFields...)
 }
 
 // String returns a string representation of this template.
