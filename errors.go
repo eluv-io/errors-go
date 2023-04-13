@@ -513,7 +513,7 @@ func (t TemplateFn) IfNotNil(err error, fields ...interface{}) error {
 	if err == nil {
 		return nil
 	}
-	return t(append(fields, err)...)
+	return t(append(fields, err)...).dropStackFrames(1)
 }
 
 // Add adds additional fields to this template.
