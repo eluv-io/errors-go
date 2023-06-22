@@ -92,10 +92,13 @@ func TestClearStacktrace(t *testing.T) {
 	err = errors.ClearStacktrace(io.EOF)
 	assert.Equal(t, io.EOF, err)
 
-	err = errors.ClearStacktrace(createNestedError())
+	nestedError := createNestedError()
+	err = errors.ClearStacktrace(nestedError)
 	fmt.Println(err)
 	s := err.Error()
 	require.NotContains(t, s, "TestClearStacktrace")
+	require.Contains(t, nestedError.Error(), err.Error())
+
 }
 
 func validateStacktrace(t *testing.T, got string) {

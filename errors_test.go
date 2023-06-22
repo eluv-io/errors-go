@@ -348,7 +348,7 @@ func TestSeparator(t *testing.T) {
 	assert.Equal(t, want, err.Error())
 }
 
-func TestGetStringField(t *testing.T) {
+func TestGetField(t *testing.T) {
 	e1 := errors.E("Test", "key", "val1")
 	e2 := errors.E("Test", e1, "key", "val2")
 
@@ -386,6 +386,44 @@ func TestGetStringField(t *testing.T) {
 	f, ok = errors.GetField(e3, "key")
 	require.False(t, ok)
 
+}
+
+func TestField(t *testing.T) {
+	e1 := errors.E("Test", "key", "val1")
+	e2 := errors.E("Test", e1, "key", 2)
+
+	f := errors.Field(nil, "key")
+	require.Nil(t, f)
+
+	f = errors.Field(io.EOF, "key")
+	require.Nil(t, f)
+
+	f = errors.Field(e1, "missing_key")
+	require.Nil(t, f)
+
+	f = errors.Field(e2, "key")
+	require.Equal(t, 2, f)
+
+	e2 = errors.E("Test", e1, "another_key", "val2")
+	f = errors.Field(e2, "key")
+	require.Equal(t, "val1", f)
+
+	e3 := errors.E("Test", e2, "yet_another_key", 3)
+	f = errors.Field(e3, "key")
+	require.Equal(t, "val1", f)
+	f = errors.Field(e3, "yet_another_key")
+	require.Equal(t, 3, f)
+
+	e2 = errors.E("Test", e1, "key", 2)
+	e3 = errors.E("Test", e2, "yet_another_key", "val3")
+	f = errors.Field(e3, "key")
+	require.Equal(t, 2, f)
+
+	fe1 := fmt.Errorf("not an elv error %s", "x")
+	e2 = errors.E("Test", fe1, "another_key", "val2")
+	e3 = errors.E("Test", e2, "yet_another_key", "val3")
+	f = errors.Field(e3, "key")
+	require.Nil(t, f)
 }
 
 func TestGetRoot(t *testing.T) {

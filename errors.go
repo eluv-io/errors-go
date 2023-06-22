@@ -413,6 +413,15 @@ func GetField(err error, key string) (string, bool) {
 	return e.GetField(key)
 }
 
+// Field returns the result of calling the Field() method on the given err if it is an *Error. Returns nil otherwise.
+func Field(err error, key string) interface{} {
+	e, ok := err.(*Error)
+	if !ok {
+		return nil
+	}
+	return e.Field(key)
+}
+
 // Separator is the string used to separate nested errors. By default, nested errors
 // are indented on a new line.
 var Separator = ":\n\t"
@@ -656,15 +665,20 @@ func (e *Error) writeKeyVal(b *bytes.Buffer, key interface{}, val interface{}) {
 	b.WriteString("]")
 }
 
-// ClearStacktrace removes the stacktrace from this error (and all nested causes).
+// ClearStacktrace creates a copy of this error and removes the stacktrace from it and all nested causes.
 func (e *Error) ClearStacktrace() *Error {
-	e.clearStack()
-	e.fields.Delete("stacktrace")
+	clone := *e
+	clone.fields = make([]interface{}, len(e.fields))
+	copy(clone.fields, e.fields)
 
-	if e2, ok := e.cause.(*Error); ok {
-		_ = e2.ClearStacktrace()
+	clone.clearStack()
+	clone.fields.Delete("stacktrace")
+	clone.unmarshalledStacktrace = ""
+
+	if e2, ok := clone.cause.(*Error); ok {
+		clone.cause = e2.ClearStacktrace()
 	}
-	return e
+	return &clone
 }
 
 func (e *Error) effectiveKind() Kind {
