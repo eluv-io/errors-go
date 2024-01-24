@@ -9,11 +9,24 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync/atomic"
 )
 
-// PopulateStacktrace controls whether stacktraces are captured on error creation per default or not. This is
+// populateStacktrace controls whether stacktraces are captured on error creation per default or not. This is
 // (obviously) a runtime setting - use the "errnostack" build tag to disable stacktrace captures at compile time.
-var PopulateStacktrace = true
+var populateStacktrace = atomic.Bool{}
+
+func init() {
+	SetPopulateStacktrace(true)
+}
+
+func SetPopulateStacktrace(b bool) {
+	populateStacktrace.Store(b)
+}
+
+func PopulateStacktrace() bool {
+	return populateStacktrace.Load()
+}
 
 // PrintStacktrace controls whether stacktraces are printed per default or not.
 var PrintStacktrace = true
@@ -437,7 +450,7 @@ var Separator = ":\n\t"
 func E(args ...interface{}) *Error {
 	e := NoTrace(args...)
 
-	if PopulateStacktrace {
+	if PopulateStacktrace() {
 		e.populateStack()
 	}
 
