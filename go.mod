@@ -1,6 +1,6 @@
 module github.com/eluv-io/errors-go
 
-go 1.20
+go 1.19
 
 require (
 	github.com/eluv-io/stack v1.8.2
