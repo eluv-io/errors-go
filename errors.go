@@ -16,6 +16,10 @@ import (
 // (obviously) a runtime setting - use the "errnostack" build tag to disable stacktrace captures at compile time.
 var populateStacktrace = atomic.Bool{}
 
+func init() {
+	SetPopulateStacktrace(true)
+}
+
 func SetPopulateStacktrace(b bool) {
 	populateStacktrace.Store(b)
 }
