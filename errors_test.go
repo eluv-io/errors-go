@@ -804,17 +804,23 @@ func TestTemplateFn_MarshalJSON(t *testing.T) {
 
 func TestDefaultKind(t *testing.T) {
 	tests := []struct {
+		msg  string
 		want errors.Kind
 		err  *errors.Error
 	}{
-		{errors.K.Other, errors.E()},
-		{errors.K.Invalid, errors.E(errors.K.Invalid.Default())},
-		{errors.K.Invalid, errors.E(errors.K.Invalid.Default(), errors.E())},
-		{errors.K.Timeout, errors.E(errors.K.Invalid.Default(), errors.E(errors.K.Timeout))},
-		{errors.K.Invalid, errors.E(errors.K.Invalid, errors.E(errors.K.NotExist))},
+		{"kind is other if none set", errors.K.Other, errors.E()},
+		{"kind is other if none set, even in cause", errors.K.Other, errors.E(errors.E())},
+		{"default is used if none node set", errors.K.Invalid, errors.E(errors.K.Invalid.Default())},
+		{"default in parent is used if none set in cause", errors.K.Invalid, errors.E(errors.K.Invalid.Default(), errors.E())},
+		{"kind in cause overrides default in parent", errors.K.Timeout, errors.E(errors.K.Invalid.Default(), errors.E(errors.K.Timeout))},
+		{"kind in parent takes precedence over kind in cause", errors.K.Invalid, errors.E(errors.K.Invalid, errors.E(errors.K.NotExist))},
+		{"kind in parent takes precedence over default in cause", errors.K.Invalid, errors.E(errors.K.Invalid, errors.E(errors.K.NotExist.Default()))},
+		{"default in cause overrides none in parent", errors.K.NotExist, errors.E(errors.E(errors.K.NotExist.Default()))},
+		{"default in cause overrides default in parent", errors.K.NotExist, errors.E(errors.K.Invalid.Default(), errors.E(errors.K.NotExist.Default()))},
+		{"order of arguments makes no difference", errors.K.NotExist, errors.E(errors.E(errors.K.NotExist.Default()), errors.K.Invalid.Default())},
 	}
 	for _, test := range tests {
-		t.Run(test.err.ErrorNoTrace(), func(t *testing.T) {
+		t.Run(test.msg, func(t *testing.T) {
 			require.Equal(t, test.want, test.err.Kind())
 		})
 	}

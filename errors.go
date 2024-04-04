@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	stderrors "errors"
 	"fmt"
 	"reflect"
@@ -221,7 +222,7 @@ func (e *Error) Op() string {
 
 // Kind returns the error's kind or errors.K.Other if no kind is set.
 func (e *Error) Kind() Kind {
-	return e.effectiveKind()
+	return e.effectiveKind(K.Other)
 }
 
 // Cause returns the error's cause or nil if no cause is set.
@@ -258,11 +259,6 @@ func (e *Error) WithDefaultKind(kind Kind) *Error {
 func (e *Error) WithCause(err error) *Error {
 	if err != nil {
 		e.cause = err
-		if cause, ok := err.(*Error); ok {
-			if e.kind == "" && cause.kind != "" {
-				e.kind = cause.kind
-			}
-		}
 	}
 	return e
 }
@@ -357,7 +353,7 @@ func (e *Error) field(key string) (interface{}, bool) {
 		}
 		return nil, false
 	case "kind":
-		return e.effectiveKind(), true
+		return e.Kind(), true
 	case "cause":
 		if e.cause != nil {
 			return e.cause, true
@@ -609,7 +605,7 @@ func (e *Error) writeFields(fieldOrder []string, writeKV func(key interface{}, v
 			err = writeKV("op", e.op)
 		}
 		if unreferenced("kind") {
-			err = writeKV("kind", e.effectiveKind())
+			err = writeKV("kind", e.Kind())
 		}
 		if err != nil {
 			return err
@@ -681,14 +677,28 @@ func (e *Error) ClearStacktrace() *Error {
 	return &clone
 }
 
-func (e *Error) effectiveKind() Kind {
-	if e.kind == "" {
-		if e.defaultKind != "" {
-			return e.defaultKind
-		}
-		return K.Other
+func (e *Error) effectiveKind(def Kind) Kind {
+	if e.kind != "" {
+		return e.kind
 	}
-	return e.kind
+
+	if e.defaultKind != "" {
+		def = e.defaultKind
+	} else if def == "" {
+		def = K.Other
+	}
+
+	if e.cause != nil {
+		var cause *Error
+		if errors.As(e.cause, &cause) {
+			eff := cause.effectiveKind(def)
+			if eff != "" {
+				return eff
+			}
+		}
+	}
+
+	return def
 }
 
 // FormatError converts this error to a string like String(), but prints fields according to the given field order. See
@@ -741,7 +751,7 @@ func Match(err1, err2 error) bool {
 	if e1.op != "" && e1.op != e2.op {
 		return false
 	}
-	if e1.kind != "" && e1.kind != e2.effectiveKind() {
+	if e1.kind != "" && e1.kind != e2.Kind() {
 		return false
 	}
 
@@ -785,7 +795,7 @@ func IsKind(expected Kind, err interface{}) bool {
 		if !ok || e == nil {
 			return false
 		}
-		if e.effectiveKind() == expected {
+		if e.Kind() == expected {
 			return true
 		}
 		err = e.cause
