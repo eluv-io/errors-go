@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	stderrors "errors"
 	"fmt"
 	"reflect"
@@ -234,7 +235,7 @@ func (e *Error) Op() string {
 
 // Kind returns the error's kind or errors.K.Other if no kind is set.
 func (e *Error) Kind() Kind {
-	return e.effectiveKind()
+	return e.effectiveKind(K.Other)
 }
 
 // Cause returns the error's cause or nil if no cause is set.
@@ -271,11 +272,6 @@ func (e *Error) WithDefaultKind(kind Kind) *Error {
 func (e *Error) WithCause(err error) *Error {
 	if err != nil {
 		e.cause = err
-		if cause, ok := err.(*Error); ok {
-			if e.kind == "" && cause.kind != "" {
-				e.kind = cause.kind
-			}
-		}
 	}
 	return e
 }
@@ -370,7 +366,7 @@ func (e *Error) field(key string) (interface{}, bool) {
 		}
 		return nil, false
 	case "kind":
-		return e.effectiveKind(), true
+		return e.Kind(), true
 	case "cause":
 		if e.cause != nil {
 			return e.cause, true
@@ -424,6 +420,15 @@ func GetField(err error, key string) (string, bool) {
 		return "", false
 	}
 	return e.GetField(key)
+}
+
+// Field returns the result of calling the Field() method on the given err if it is an *Error. Returns nil otherwise.
+func Field(err error, key string) interface{} {
+	e, ok := err.(*Error)
+	if !ok {
+		return nil
+	}
+	return e.Field(key)
 }
 
 // Separator is the string used to separate nested errors. By default, nested errors
@@ -613,7 +618,7 @@ func (e *Error) writeFields(fieldOrder []string, writeKV func(key interface{}, v
 			err = writeKV("op", e.op)
 		}
 		if unreferenced("kind") {
-			err = writeKV("kind", e.effectiveKind())
+			err = writeKV("kind", e.Kind())
 		}
 		if err != nil {
 			return err
@@ -669,25 +674,44 @@ func (e *Error) writeKeyVal(b *bytes.Buffer, key interface{}, val interface{}) {
 	b.WriteString("]")
 }
 
-// ClearStacktrace removes the stacktrace from this error (and all nested causes).
+// ClearStacktrace creates a copy of this error and removes the stacktrace from it and all nested causes.
 func (e *Error) ClearStacktrace() *Error {
-	e.clearStack()
-	e.fields.Delete("stacktrace")
+	clone := *e
+	clone.fields = make([]interface{}, len(e.fields))
+	copy(clone.fields, e.fields)
 
-	if e2, ok := e.cause.(*Error); ok {
-		_ = e2.ClearStacktrace()
+	clone.clearStack()
+	clone.fields.Delete("stacktrace")
+	clone.unmarshalledStacktrace = ""
+
+	if e2, ok := clone.cause.(*Error); ok {
+		clone.cause = e2.ClearStacktrace()
 	}
-	return e
+	return &clone
 }
 
-func (e *Error) effectiveKind() Kind {
-	if e.kind == "" {
-		if e.defaultKind != "" {
-			return e.defaultKind
-		}
-		return K.Other
+func (e *Error) effectiveKind(def Kind) Kind {
+	if e.kind != "" {
+		return e.kind
 	}
-	return e.kind
+
+	if e.defaultKind != "" {
+		def = e.defaultKind
+	} else if def == "" {
+		def = K.Other
+	}
+
+	if e.cause != nil {
+		var cause *Error
+		if errors.As(e.cause, &cause) {
+			eff := cause.effectiveKind(def)
+			if eff != "" {
+				return eff
+			}
+		}
+	}
+
+	return def
 }
 
 // FormatError converts this error to a string like String(), but prints fields according to the given field order. See
@@ -740,7 +764,7 @@ func Match(err1, err2 error) bool {
 	if e1.op != "" && e1.op != e2.op {
 		return false
 	}
-	if e1.kind != "" && e1.kind != e2.effectiveKind() {
+	if e1.kind != "" && e1.kind != e2.Kind() {
 		return false
 	}
 
@@ -784,7 +808,7 @@ func IsKind(expected Kind, err interface{}) bool {
 		if !ok || e == nil {
 			return false
 		}
-		if e.effectiveKind() == expected {
+		if e.Kind() == expected {
 			return true
 		}
 		err = e.cause

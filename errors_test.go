@@ -348,7 +348,7 @@ func TestSeparator(t *testing.T) {
 	assert.Equal(t, want, err.Error())
 }
 
-func TestGetStringField(t *testing.T) {
+func TestGetField(t *testing.T) {
 	e1 := errors.E("Test", "key", "val1")
 	e2 := errors.E("Test", e1, "key", "val2")
 
@@ -386,6 +386,44 @@ func TestGetStringField(t *testing.T) {
 	f, ok = errors.GetField(e3, "key")
 	require.False(t, ok)
 
+}
+
+func TestField(t *testing.T) {
+	e1 := errors.E("Test", "key", "val1")
+	e2 := errors.E("Test", e1, "key", 2)
+
+	f := errors.Field(nil, "key")
+	require.Nil(t, f)
+
+	f = errors.Field(io.EOF, "key")
+	require.Nil(t, f)
+
+	f = errors.Field(e1, "missing_key")
+	require.Nil(t, f)
+
+	f = errors.Field(e2, "key")
+	require.Equal(t, 2, f)
+
+	e2 = errors.E("Test", e1, "another_key", "val2")
+	f = errors.Field(e2, "key")
+	require.Equal(t, "val1", f)
+
+	e3 := errors.E("Test", e2, "yet_another_key", 3)
+	f = errors.Field(e3, "key")
+	require.Equal(t, "val1", f)
+	f = errors.Field(e3, "yet_another_key")
+	require.Equal(t, 3, f)
+
+	e2 = errors.E("Test", e1, "key", 2)
+	e3 = errors.E("Test", e2, "yet_another_key", "val3")
+	f = errors.Field(e3, "key")
+	require.Equal(t, 2, f)
+
+	fe1 := fmt.Errorf("not an elv error %s", "x")
+	e2 = errors.E("Test", fe1, "another_key", "val2")
+	e3 = errors.E("Test", e2, "yet_another_key", "val3")
+	f = errors.Field(e3, "key")
+	require.Nil(t, f)
 }
 
 func TestGetRoot(t *testing.T) {
@@ -766,17 +804,23 @@ func TestTemplateFn_MarshalJSON(t *testing.T) {
 
 func TestDefaultKind(t *testing.T) {
 	tests := []struct {
+		msg  string
 		want errors.Kind
 		err  *errors.Error
 	}{
-		{errors.K.Other, errors.E()},
-		{errors.K.Invalid, errors.E(errors.K.Invalid.Default())},
-		{errors.K.Invalid, errors.E(errors.K.Invalid.Default(), errors.E())},
-		{errors.K.Timeout, errors.E(errors.K.Invalid.Default(), errors.E(errors.K.Timeout))},
-		{errors.K.Invalid, errors.E(errors.K.Invalid, errors.E(errors.K.NotExist))},
+		{"kind is other if none set", errors.K.Other, errors.E()},
+		{"kind is other if none set, even in cause", errors.K.Other, errors.E(errors.E())},
+		{"default is used if none set", errors.K.Invalid, errors.E(errors.K.Invalid.Default())},
+		{"default in parent is used if none set in cause", errors.K.Invalid, errors.E(errors.K.Invalid.Default(), errors.E())},
+		{"kind in cause overrides default in parent", errors.K.Timeout, errors.E(errors.K.Invalid.Default(), errors.E(errors.K.Timeout))},
+		{"kind in parent takes precedence over kind in cause", errors.K.Invalid, errors.E(errors.K.Invalid, errors.E(errors.K.NotExist))},
+		{"kind in parent takes precedence over default in cause", errors.K.Invalid, errors.E(errors.K.Invalid, errors.E(errors.K.NotExist.Default()))},
+		{"default in cause overrides none in parent", errors.K.NotExist, errors.E(errors.E(errors.K.NotExist.Default()))},
+		{"default in cause overrides default in parent", errors.K.NotExist, errors.E(errors.K.Invalid.Default(), errors.E(errors.K.NotExist.Default()))},
+		{"order of arguments makes no difference", errors.K.NotExist, errors.E(errors.E(errors.K.NotExist.Default()), errors.K.Invalid.Default())},
 	}
 	for _, test := range tests {
-		t.Run(test.err.ErrorNoTrace(), func(t *testing.T) {
+		t.Run(test.msg, func(t *testing.T) {
 			require.Equal(t, test.want, test.err.Kind())
 		})
 	}
