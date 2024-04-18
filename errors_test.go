@@ -810,7 +810,7 @@ func TestDefaultKind(t *testing.T) {
 	}{
 		{"kind is other if none set", errors.K.Other, errors.E()},
 		{"kind is other if none set, even in cause", errors.K.Other, errors.E(errors.E())},
-		{"default is used if none node set", errors.K.Invalid, errors.E(errors.K.Invalid.Default())},
+		{"default is used if none set", errors.K.Invalid, errors.E(errors.K.Invalid.Default())},
 		{"default in parent is used if none set in cause", errors.K.Invalid, errors.E(errors.K.Invalid.Default(), errors.E())},
 		{"kind in cause overrides default in parent", errors.K.Timeout, errors.E(errors.K.Invalid.Default(), errors.E(errors.K.Timeout))},
 		{"kind in parent takes precedence over kind in cause", errors.K.Invalid, errors.E(errors.K.Invalid, errors.E(errors.K.NotExist))},
