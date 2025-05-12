@@ -509,6 +509,48 @@ func TestIgnore(t *testing.T) {
 	assert.Equal(t, 2, called)
 }
 
+func TestLog(t *testing.T) {
+	type logMsg struct {
+		msg    string
+		fields []interface{}
+	}
+
+	var lastMsg *logMsg
+	logFn := func(msg string, fields ...interface{}) {
+		lastMsg = &logMsg{
+			msg:    msg,
+			fields: fields,
+		}
+	}
+
+	errors.Log(nil, logFn) // ensure no crash
+	assert.Nil(t, lastMsg)
+
+	called := 0
+	errors.Log(func() error {
+		called++
+		return nil
+	}, logFn)
+	assert.Equal(t, 1, called)
+	assert.Nil(t, lastMsg)
+
+	errors.Log(func() error {
+		called++
+		return io.EOF
+	}, logFn)
+	assert.Equal(t, 2, called)
+	assert.NotNil(t, lastMsg)
+	assert.Equal(t, "errors.Log function call returned error", lastMsg.msg)
+
+	lastMsg = nil
+	errors.Log(func() error {
+		called++
+		return io.EOF
+	}, nil)
+	assert.Equal(t, 3, called)
+	assert.Nil(t, lastMsg)
+}
+
 func TestFromContext(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
 		assert.Nil(t, errors.FromContext(nil))
@@ -843,7 +885,7 @@ func TestError_UnmarshalJSON(t *testing.T) {
 
 	// except for stack trace verification the test would also work by creating
 	// Error like this - note the &
-	//var e2 = &errors.Error{}
+	// var e2 = &errors.Error{}
 
 	err = json.Unmarshal(b, e2)
 	require.NoError(t, err)

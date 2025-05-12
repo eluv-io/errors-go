@@ -8,6 +8,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -887,6 +888,38 @@ func Ignore(f func() error) {
 		return
 	}
 	_ = f()
+}
+
+// Log calls the given function and logs the error if any. Prints errors to stdout if logFn is nil.
+//
+// Useful in defer statements where the deferred function returns an error, i.e.
+//
+//	defer writer.Close()
+//
+// can be written as
+//
+//	defer errors.Log(writer.Close, logFn)
+func Log(f func() error, logFn func(msg string, fields ...interface{})) {
+	if f == nil {
+		return
+	}
+
+	err := f()
+	if err == nil {
+		return
+	}
+
+	msg := "errors.Log function call returned error"
+	fnName := "unknown"
+	if ffp := runtime.FuncForPC(reflect.ValueOf(f).Pointer()); ffp != nil {
+		fnName = ffp.Name()
+	}
+
+	if logFn == nil {
+		fmt.Printf("%s: function=%s error=%s\n", msg, fnName, err)
+	} else {
+		logFn(msg, "function", fnName, "error", err)
+	}
 }
 
 // Wrap wraps the given error in an Error instance with E(err) if err is not an *Error itself - otherwise returns err as
