@@ -683,6 +683,7 @@ func (e *Error) ClearStacktrace() *Error {
 
 	clone.clearStack()
 	clone.fields.Delete("stacktrace")
+	clone.fields.Delete("remote_stack")
 	clone.unmarshalledStacktrace = ""
 
 	if e2, ok := clone.cause.(*Error); ok {
