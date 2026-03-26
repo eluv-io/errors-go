@@ -380,16 +380,20 @@ func (e *Error) field(key string) (interface{}, bool) {
 // Field returns the given field from this error or any nested errors. Returns nil if the field does not exist.
 func (e *Error) Field(key string) interface{} {
 	var err interface{} = e
+loop:
 	for {
-		ex, ok := err.(*Error)
-		if !ok {
-			break
+		switch ex := err.(type) {
+		case *Error:
+			val, ok := ex.field(key)
+			if ok {
+				return val
+			}
+			err = ex.cause
+		case *ErrorList:
+			err = ex.Cause()
+		default:
+			break loop
 		}
-		val, ok := ex.field(key)
-		if ok {
-			return val
-		}
-		err = ex.cause
 	}
 	return nil
 }
@@ -399,16 +403,20 @@ func (e *Error) Field(key string) interface{} {
 // Returns the retrieved field value and true if found, or the empty string and false if not found.
 func (e *Error) GetField(key string) (string, bool) {
 	var err interface{} = e
+loop:
 	for {
-		ex, ok := err.(*Error)
-		if !ok {
-			break
+		switch ex := err.(type) {
+		case *Error:
+			val, ok := ex.field(key)
+			if ok {
+				return toString(val), true
+			}
+			err = ex.cause
+		case *ErrorList:
+			err = ex.Cause()
+		default:
+			break loop
 		}
-		val, ok := ex.field(key)
-		if ok {
-			return toString(val), true
-		}
-		err = ex.cause
 	}
 	return "", false
 }
@@ -797,50 +805,69 @@ func Match(err1, err2 error) bool {
 	return true
 }
 
-// IsNotExist reports whether err is an *Error of Kind NotExist. Returns false if err is nil.
+// IsNotExist reports whether err is an *Error or *ErrorList of Kind NotExist.
+// Returns false if err is nil.
 func IsNotExist(err error) bool {
 	return IsKind(K.NotExist, err)
 }
 
-// IsKind reports whether err is an *Error of the given Kind.
+// IsKind reports whether err is an *Error or *ErrorList of the given Kind.
 // Returns false if err is nil.
 func IsKind(expected Kind, err interface{}) bool {
 	for {
-		e, ok := err.(*Error)
-		if !ok || e == nil {
+		switch e := err.(type) {
+		case *Error:
+			if e == nil {
+				return false
+			}
+			if e.Kind() == expected {
+				return true
+			}
+			err = e.cause
+		case *ErrorList:
+			if e == nil {
+				return false
+			}
+			err = e.Cause()
+		default:
 			return false
 		}
-		if e.Kind() == expected {
-			return true
-		}
-		err = e.cause
 	}
 }
 
-// GetRoot returns the innermost nested *Error of the given error, or nil if the provided object is not an *Error.
+// GetRoot returns the innermost nested *Error of the given error.
+// Returns nil if the provided object is not an *Error or *ErrorList.
 func GetRoot(err interface{}) *Error {
 	var root *Error
 	for {
-		e, ok := err.(*Error)
-		if !ok {
+		switch e := err.(type) {
+		case *Error:
+			root = e
+			err = e.cause
+		case *ErrorList:
+			// Keep current root
+			err = e.Cause()
+		default:
 			return root
 		}
-		root = e
-		err = e.cause
 	}
 }
 
-// GetRootCause returns the first nested error that is not an *Error object. Returns NilError if err is nil.
+// GetRootCause returns the first nested error that is not an *Error or *ErrorList object.
+// Returns NilError if err is nil.
 func GetRootCause(err error) error {
 	for err != nil {
-		e, ok := err.(*Error)
-		if !ok {
-			return err
+		switch e := err.(type) {
+		case *Error:
+			if e.cause == nil {
+				return NilError
+			}
+			err = e.cause
+		case *ErrorList:
+			err = e.Cause()
+		default:
+			return e
 		}
-		if e.cause == nil {
-			return NilError
-		}
-		err = e.cause
 	}
 	return NilError
 }

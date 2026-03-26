@@ -56,7 +56,7 @@ func (k Kind) Default() DefaultKind {
 // with an explicit call to Error.Kind(kind) or by inheriting it from a nested error.
 //
 //	e := errors.Template("read user", errors.K.Invalid.Default())
-//  return e(nested)
+//	return e(nested)
 //
 // In the above example, the returned error will have the nested error's kind if it's defined or K.Invalid otherwise. If
 // the template definition didn't use Default(), the returned error would always be K.Invalid, regardless of the kind
