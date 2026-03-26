@@ -3,6 +3,7 @@ package errors_test
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"strings"
@@ -720,15 +721,15 @@ func TestError_Unwrap(t *testing.T) {
 	fmt.Println(err)
 	require.Contains(t, err.Error(), "send email")
 
-	err = err.(*errors.Error).Unwrap()
+	err = stderrors.Unwrap(err)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "connect")
 
-	err = err.(*errors.Error).Unwrap()
+	err = stderrors.Unwrap(err)
 	require.Error(t, err)
 	require.Equal(t, err.Error(), "network unreachable")
 
-	require.Nil(t, errors.E("noop").Unwrap())
+	require.Nil(t, stderrors.Unwrap(errors.E("noop")))
 }
 
 func TestError_FormatError(t *testing.T) {

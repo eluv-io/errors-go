@@ -2,6 +2,7 @@ package errors_test
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"testing"
@@ -73,19 +74,19 @@ func TestErrorList_Unwrap(t *testing.T) {
 
 	require.Contains(t, err.Error(), "send email")
 
-	err = err.(*errors.Error).Unwrap()
+	err = stderrors.Unwrap(err)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "send email")
 	require.Contains(t, err.Error(), "connect")
 
-	err = err.(*errors.Error).Unwrap()
+	err = stderrors.Unwrap(err)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "connect")
 	require.Contains(t, err.Error(), "network unreachable")
 	require.Contains(t, err.Error(), "context canceled")
 	require.Contains(t, err.Error(), "i/o timeout")
 
-	err = err.(*errors.ErrorList).Unwrap()
+	err = stderrors.Unwrap(err)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "network unreachable")
 	require.NotContains(t, err.Error(), "context canceled")
