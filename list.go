@@ -13,8 +13,6 @@ import (
 //
 // Any nil errors within errs will be ignored. If the final list contains a single error, the error is returned instead
 // of the list.
-//
-//
 func Append(err error, errs ...error) error {
 	for _, e := range errs {
 		if e != nil {
@@ -48,6 +46,13 @@ type ErrorList struct {
 	Errors []error
 }
 
+func (e *ErrorList) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause()
+}
+
 func (e *ErrorList) Append(errs ...error) {
 	for _, err := range errs {
 		switch err := err.(type) {
@@ -66,6 +71,14 @@ func (e *ErrorList) Append(errs ...error) {
 
 func (e *ErrorList) doAppend(errs ...error) {
 	e.Errors = append(e.Errors, errs...)
+}
+
+// Cause returns the last error of the error list, or returns nil if the error list is empty.
+func (e *ErrorList) Cause() error {
+	if len(e.Errors) == 0 {
+		return nil
+	}
+	return e.Errors[len(e.Errors)-1]
 }
 
 // Error returns the error list as a formatted, multi-line string.

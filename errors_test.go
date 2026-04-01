@@ -3,6 +3,7 @@ package errors_test
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"strings"
@@ -151,16 +152,24 @@ func TestIsKind(t *testing.T) {
 	assert.True(t, errors.IsKind(errors.K.NotExist, errors.E("op", errors.E("op_nested", errors.K.NotExist))))
 	assert.True(t, errors.IsKind(errors.K.NotExist, errors.E("op1", errors.K.Invalid, errors.E("op2", errors.K.NotExist))))
 	assert.True(t, errors.IsKind(errors.K.NotExist, errors.E("op1", errors.K.Invalid, errors.E("op2", errors.K.Invalid, errors.E("op3", errors.K.Invalid, errors.E("op4", errors.K.NotExist))))))
+	assert.True(t, errors.IsKind(errors.K.NotExist, errors.Append(errors.E("op1", errors.K.Invalid), errors.E("op2", errors.K.NotExist))))
+	assert.True(t, errors.IsKind(errors.K.NotExist, errors.Append(errors.E("op1", errors.K.Invalid), errors.E("op2", errors.K.Invalid, errors.Append(errors.E("op3", errors.K.Invalid), errors.E("op4", errors.K.NotExist))))))
 
 	assert.False(t, errors.IsKind(errors.K.IO, errors.E("op", errors.K.NotExist, io.EOF)))
 	assert.False(t, errors.IsKind(errors.K.NotExist, errors.E("op", errors.K.Invalid, errors.E("op_nested", errors.K.Other))))
+	assert.False(t, errors.IsKind(errors.K.NotExist, errors.E("op", errors.K.Invalid, errors.E("op_list", errors.K.Other, errors.Append(errors.E(errors.K.Invalid), errors.E(errors.K.Other))))))
 }
 
 func TestIsNotExist(t *testing.T) {
-	assert.False(t, errors.IsNotExist(errors.E("op", errors.K.IO, io.EOF)))
 	assert.True(t, errors.IsNotExist(errors.E("op", errors.E("op_nested", errors.K.NotExist))))
 	assert.True(t, errors.IsNotExist(errors.E("op1", errors.K.Invalid, errors.E("op2", errors.K.NotExist))))
 	assert.True(t, errors.IsNotExist(errors.E("op1", errors.K.Invalid, errors.E("op2", errors.K.Invalid, errors.E("op3", errors.K.Invalid, errors.E("op4", errors.K.NotExist))))))
+	assert.True(t, errors.IsNotExist(errors.Append(errors.E("op1", errors.K.Invalid), errors.E("op2", errors.K.NotExist))))
+	assert.True(t, errors.IsNotExist(errors.Append(errors.E("op1", errors.K.Invalid), errors.E("op2", errors.K.Invalid, errors.Append(errors.E("op3", errors.K.Invalid), errors.E("op4", errors.K.NotExist))))))
+
+	assert.False(t, errors.IsNotExist(errors.E("op", errors.K.IO, io.EOF)))
+	assert.False(t, errors.IsNotExist(errors.E("op", errors.K.Invalid, errors.E("op_nested", errors.K.Other))))
+	assert.False(t, errors.IsNotExist(errors.E("op", errors.K.Invalid, errors.E("op_list", errors.K.Other, errors.Append(errors.E(errors.K.Invalid), errors.E(errors.K.Other))))))
 }
 
 const (
@@ -380,12 +389,35 @@ func TestGetField(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "val2", f)
 
+	e2 = errors.E("Test", "key", "val2")
+	le1 := errors.Append(e1, e2)
+	e3 = errors.E("Test", le1, "another_key", "val3")
+	f, ok = errors.GetField(e3, "key")
+	require.True(t, ok)
+	require.Equal(t, "val2", f)
+
+	e4 := errors.E("Test", "another_key", "val4")
+	le2 := errors.Append(e4, e3)
+	e5 := errors.E("Test", le2, "yet_another_key", "val5")
+	f, ok = errors.GetField(e5, "key")
+	require.True(t, ok)
+	require.Equal(t, "val2", f)
+
 	fe1 := fmt.Errorf("not an elv error %s", "x")
 	e2 = errors.E("Test", fe1, "another_key", "val2")
 	e3 = errors.E("Test", e2, "yet_another_key", "val3")
 	f, ok = errors.GetField(e3, "key")
 	require.False(t, ok)
 
+	le1 = errors.Append(e1, fe1)
+	e3 = errors.E("Test", le1, "another_key", "val3")
+	f, ok = errors.GetField(e3, "key")
+	require.False(t, ok)
+
+	le2 = errors.Append(e4, e3)
+	e5 = errors.E("Test", le2, "yet_another_key", "val5")
+	f, ok = errors.GetField(e5, "key")
+	require.False(t, ok)
 }
 
 func TestField(t *testing.T) {
@@ -419,10 +451,32 @@ func TestField(t *testing.T) {
 	f = errors.Field(e3, "key")
 	require.Equal(t, 2, f)
 
+	e2 = errors.E("Test", "key", 2)
+	le1 := errors.Append(e1, e2)
+	e3 = errors.E("Test", le1, "another_key", "val3")
+	f = errors.Field(e3, "key")
+	require.Equal(t, 2, f)
+
+	e4 := errors.E("Test", "another_key", "val4")
+	le2 := errors.Append(e4, e3)
+	e5 := errors.E("Test", le2, "yet_another_key", "val5")
+	f = errors.Field(e5, "key")
+	require.Equal(t, 2, f)
+
 	fe1 := fmt.Errorf("not an elv error %s", "x")
 	e2 = errors.E("Test", fe1, "another_key", "val2")
 	e3 = errors.E("Test", e2, "yet_another_key", "val3")
 	f = errors.Field(e3, "key")
+	require.Nil(t, f)
+
+	le1 = errors.Append(e1, fe1)
+	e3 = errors.E("Test", le1, "another_key", "val3")
+	f = errors.Field(e3, "key")
+	require.Nil(t, f)
+
+	le2 = errors.Append(e4, e3)
+	e5 = errors.E("Test", le2, "yet_another_key", "val5")
+	f = errors.Field(e5, "key")
 	require.Nil(t, f)
 }
 
@@ -442,6 +496,12 @@ func TestGetRoot(t *testing.T) {
 	require.Equal(t, root, errors.GetRoot(e))
 
 	e = errors.E("test", errors.E("cause1", errors.E("cause2", errors.E("cause3", root))))
+	require.Equal(t, root, errors.GetRoot(e))
+
+	e = errors.E("test", errors.Append(errors.E("cause1"), errors.E("cause2"), errors.E("cause3", root)))
+	require.Equal(t, root, errors.GetRoot(e))
+
+	e = errors.E("test", errors.Append(errors.E("cause1"), errors.E("cause2", errors.Append(errors.E("cause3"), errors.E("cause4", root)))))
 	require.Equal(t, root, errors.GetRoot(e))
 }
 
@@ -463,12 +523,24 @@ func TestGetRootCause(t *testing.T) {
 	e = errors.E("test", errors.E("cause1", errors.E("cause2", errors.E("cause3", root))))
 	require.Equal(t, errors.NilError, errors.GetRootCause(e))
 
+	e = errors.E("test", errors.Append(errors.E("cause1", io.EOF), errors.E("cause2", io.EOF), errors.E("cause3", root)))
+	require.Equal(t, errors.NilError, errors.GetRootCause(e))
+
+	e = errors.E("test", errors.Append(errors.E("cause1", io.EOF), errors.E("cause2", errors.Append(errors.E("cause3", io.EOF), errors.E("cause4", root)))))
+	require.Equal(t, errors.NilError, errors.GetRootCause(e))
+
 	root = errors.E("root", io.EOF)
 
 	e = errors.E("test", root)
 	require.Equal(t, io.EOF, errors.GetRootCause(e))
 
 	e = errors.E("test", errors.E("cause1", errors.E("cause2", errors.E("cause3", root))))
+	require.Equal(t, io.EOF, errors.GetRootCause(e))
+
+	e = errors.E("test", errors.Append(errors.E("cause1"), errors.E("cause2"), errors.E("cause3", root)))
+	require.Equal(t, io.EOF, errors.GetRootCause(e))
+
+	e = errors.E("test", errors.Append(errors.E("cause1"), errors.E("cause2", errors.Append(errors.E("cause3"), errors.E("cause4", root)))))
 	require.Equal(t, io.EOF, errors.GetRootCause(e))
 
 	// cause is converted to std error if it doesn't implement error interface
@@ -593,6 +665,8 @@ func TestError_Kind(t *testing.T) {
 		{errors.K.Other, errors.E()},
 		{errors.K.Invalid, errors.E(errors.K.Invalid)},
 		{errors.K.Invalid, errors.E().WithKind(errors.K.Invalid)},
+		{errors.K.Invalid, errors.E(errors.Append(errors.E(), errors.E(errors.K.IO), errors.E(errors.K.Invalid)))},
+		{errors.K.Invalid, errors.E(errors.Append(errors.E(), errors.E(errors.Append(errors.E(), errors.E(errors.K.Invalid)))))},
 	}
 	for idx, tt := range tests {
 		t.Run(fmt.Sprint(idx, tt.want), func(t *testing.T) {
@@ -647,15 +721,15 @@ func TestError_Unwrap(t *testing.T) {
 	fmt.Println(err)
 	require.Contains(t, err.Error(), "send email")
 
-	err = err.(*errors.Error).Unwrap()
+	err = stderrors.Unwrap(err)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "connect")
 
-	err = err.(*errors.Error).Unwrap()
+	err = stderrors.Unwrap(err)
 	require.Error(t, err)
 	require.Equal(t, err.Error(), "network unreachable")
 
-	require.Nil(t, errors.E("noop").Unwrap())
+	require.Nil(t, stderrors.Unwrap(errors.E("noop")))
 }
 
 func TestError_FormatError(t *testing.T) {

@@ -2,6 +2,7 @@ package errors_test
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"testing"
@@ -55,6 +56,41 @@ func TestAppend(t *testing.T) {
 
 	list = nil
 	assertErrorList(t, errors.Append(list, io.EOF, io.ErrUnexpectedEOF), io.EOF, io.ErrUnexpectedEOF)
+}
+
+func TestErrorList_Unwrap(t *testing.T) {
+	var err error
+	err = errors.E("send email",
+		errors.E("connect", errors.K.IO,
+			errors.Append(
+				errors.Str("network unreachable"),
+				errors.Str("context canceled"),
+				errors.Str("i/o timeout"),
+			),
+			"k1", "v1",
+		),
+	)
+	fmt.Println(err)
+
+	require.Contains(t, err.Error(), "send email")
+
+	err = stderrors.Unwrap(err)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "send email")
+	require.Contains(t, err.Error(), "connect")
+
+	err = stderrors.Unwrap(err)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "connect")
+	require.Contains(t, err.Error(), "network unreachable")
+	require.Contains(t, err.Error(), "context canceled")
+	require.Contains(t, err.Error(), "i/o timeout")
+
+	err = stderrors.Unwrap(err)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "network unreachable")
+	require.NotContains(t, err.Error(), "context canceled")
+	require.Equal(t, err.Error(), "i/o timeout")
 }
 
 func TestErrorList_Append(t *testing.T) {
