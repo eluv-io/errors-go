@@ -6,6 +6,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -706,6 +707,7 @@ func TestError_WithCause(t *testing.T) {
 		{"*Error: override kind", errors.E().WithCause(errors.E(errors.K.Invalid)), "kind [invalid] cause:\n\tkind [invalid]"},
 		{"*Error: do not override uninitialized kind", errors.E(errors.K.IO).WithCause(errors.E(errors.K.Invalid)), "kind [I/O error] cause:\n\tkind [invalid]"},
 		{"*Error: do not override kind initialized to K.Other", errors.E(errors.K.Other).WithCause(errors.E(errors.K.Invalid)), "kind [unclassified error] cause:\n\tkind [invalid]"},
+		{"typed-nil *Error is rejected like an untyped nil", errors.E().WithCause((*errors.Error)(nil)), "kind [unclassified error]"},
 	}
 
 	for _, test := range tests {
@@ -713,6 +715,28 @@ func TestError_WithCause(t *testing.T) {
 			require.Equal(t, test.want, test.err.Error())
 		})
 	}
+}
+
+// TestError_WithCause_typedNil reproduces an observed panic: a caller passes a nil *Error (typed nil, stored in a
+// non-nil error interface) as the cause. Kind() and JSON marshaling used to recurse into that nil cause via
+// effectiveKind() without a nil check, causing a nil pointer dereference.
+func TestError_WithCause_typedNil(t *testing.T) {
+	var nilErr *errors.Error
+	require.Nil(t, nilErr)
+
+	err := errors.E("op", errors.K.IO, error(nilErr))
+	require.Nil(t, err.Cause())
+	require.Equal(t, errors.K.IO, err.Kind())
+
+	bts, mErr := json.Marshal(err)
+	require.NoError(t, mErr)
+	require.Contains(t, string(bts), `"kind":"I/O error"`)
+
+	// same scenario, but via With() and a nested std-lib typed-nil error
+	var nilStd *net.AddrError
+	err2 := errors.E().With(error(nilStd))
+	require.Nil(t, err2.Cause())
+	require.Equal(t, errors.K.Other, err2.Kind())
 }
 
 func TestError_Unwrap(t *testing.T) {
