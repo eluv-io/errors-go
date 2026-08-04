@@ -29,6 +29,30 @@ func ExampleError() {
 	// 	op [get] kind [I/O error] cause [EOF]
 }
 
+// ExampleIfNotNil demonstrates why IfNotNil exists: a function whose signature returns the error interface must not
+// return the result of Wrap() directly, because Wrap() returns *Error and a nil *Error assigned to an error
+// interface return value is not itself nil. IfNotNil avoids that trap by returning error and checking for nil first.
+func ExampleIfNotNil() {
+	readFile := func(err error) error {
+		// BUG: even when err is nil, this returns a non-nil error interface, because Wrap returns *Error.
+		return errors.Wrap(err, "readFile")
+	}
+	readFileFixed := func(err error) error {
+		// IfNotNil returns error directly and checks for nil before constructing anything, so a nil err correctly
+		// propagates as a true nil.
+		return errors.IfNotNil(err, "readFile")
+	}
+
+	fmt.Println("Wrap:", readFile(nil) != nil)
+	fmt.Println("IfNotNil:", readFileFixed(nil) != nil)
+	fmt.Println(errors.IfNotNil(io.EOF, "readFile"))
+
+	// Output:
+	// Wrap: true
+	// IfNotNil: false
+	// op [readFile] kind [unclassified error] cause [EOF]
+}
+
 func ExampleTemplate() {
 	var err error
 	e := errors.Template("validate", errors.K.Invalid)
