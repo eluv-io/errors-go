@@ -271,7 +271,7 @@ func (e *Error) WithDefaultKind(kind Kind) *Error {
 // WithCause sets the given original error and returns this error instance for call chaining. If the cause is an *Error
 // and this error's kind is not yet initialized, it inherits the kind of the cause.
 func (e *Error) WithCause(err error) *Error {
-	if err != nil {
+	if err != nil && !isNilValue(err) {
 		e.cause = err
 	}
 	return e
@@ -356,7 +356,7 @@ func (e *Error) With(args ...interface{}) *Error {
 }
 
 func (e *Error) isZero() bool {
-	return e.op == "" && e.kind == "" && e.cause == nil && len(e.fields) == 0
+	return e == nil || (e.op == "" && e.kind == "" && e.cause == nil && len(e.fields) == 0)
 }
 
 func (e *Error) field(key string) (interface{}, bool) {
@@ -701,6 +701,9 @@ func (e *Error) ClearStacktrace() *Error {
 }
 
 func (e *Error) effectiveKind(def Kind) Kind {
+	if e == nil {
+		return def
+	}
 	if e.kind != "" {
 		return e.kind
 	}

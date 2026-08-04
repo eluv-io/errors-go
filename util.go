@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/json"
+	"reflect"
 )
 
 // pad appends str to the buffer if the buffer already has some data.
@@ -31,4 +32,18 @@ func convertForJSONMarshalling(obj interface{}) (interface{}, bool) {
 		return t.Error(), true
 	}
 	return obj, false
+}
+
+// isNilValue reports whether err is a non-nil error interface wrapping a nil pointer (or other nilable value), e.g. a
+// nil *Error returned from a function and passed on as-is. Such a value is != nil when compared as an interface, but
+// dereferencing it later (e.g. in effectiveKind()) would panic. Rejecting it here keeps a nil cause from ever being
+// stored.
+func isNilValue(err error) bool {
+	v := reflect.ValueOf(err)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
