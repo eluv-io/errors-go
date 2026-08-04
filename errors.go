@@ -969,6 +969,27 @@ func Wrap(err error, args ...interface{}) *Error {
 	return e
 }
 
+// IfNotNil is a replacement for E() to use whenever err may be nil and the result is returned from a function whose
+// signature declares the error interface rather than *Error. Given the same op/kind/fields grammar as E(), it creates
+// an Error and sets err as its cause, but - unlike E() - returns nil (a real, untyped nil) if err is nil. See also
+// TemplateFn.IfNotNil, which offers the same nil-propagation guarantee for errors created from a Template.
+//
+//	func doSomething() error {
+//	    err := somethingElse()
+//	    return errors.IfNotNil(err, "doSomething", K.IO)
+//	}
+//
+// Do not use Wrap() for this purpose: Wrap() returns *Error, so "return Wrap(err, ...)" from a function declared to
+// return error converts a nil *Error into a non-nil error interface value once assigned to the interface return
+// type - the classic Go typed-nil gotcha. IfNotNil avoids this because it returns error and checks for nil before
+// ever constructing one.
+func IfNotNil(err error, args ...interface{}) error {
+	if err == nil {
+		return nil
+	}
+	return E(args...).WithCause(err).dropStackFrames(1)
+}
+
 // FromContext creates an error from the given context and additional error arguments as passed to E(). It returns
 //   - nil if ctx.Err() returns nil
 //   - an error from the given args and kind Timeout if the ctx timed out

@@ -565,6 +565,46 @@ func TestWrap(t *testing.T) {
 	assert.Equal(t, "op [read] kind [invalid] key [val] cause [bad weather]", errors.Wrap(err, "key", "val").Error())
 }
 
+func TestIfNotNil(t *testing.T) {
+	assert.Nil(t, errors.IfNotNil(nil))
+	assert.Nil(t, errors.IfNotNil(nil, "key", "value"))
+
+	assert.Equal(t, "kind [unclassified error] cause [EOF]", errors.IfNotNil(io.EOF).Error())
+
+	// like E(), the args passed to IfNotNil follow the op/kind/fields grammar - a leading string is the op.
+	assert.Equal(t, "op [op1] kind [unclassified error] key [val] cause [EOF]",
+		errors.IfNotNil(io.EOF, "op1", "key", "val").Error())
+
+	// unlike Wrap, IfNotNil always adds a new layer of context - even if err is already an *Error - since it must
+	// return the plain error interface rather than mutate and return the existing *Error. The kind is inherited from
+	// the cause, as usual.
+	err := errors.E("read", errors.K.Invalid, "cause", "bad weather")
+	assert.Equal(t, "op [wrap] kind [invalid] cause:\n\top [read] kind [invalid] cause [bad weather]",
+		errors.IfNotNil(err, "wrap").Error())
+}
+
+// TestIfNotNil_nilInterface proves the actual motivation for IfNotNil: Wrap returns *Error, so returning its result
+// from a function declared to return the error interface reintroduces the classic Go typed-nil gotcha, whereas
+// IfNotNil - which returns error and checks for nil before constructing anything - does not. If Wrap is ever changed
+// to return error instead of *Error, the "wrapAsError(nil) != nil" assertion below would start failing - that would
+// be a good outcome, not a regression, and this test (or at least that half of it) should simply be deleted then.
+func TestIfNotNil_nilInterface(t *testing.T) {
+	wrapAsError := func(err error) error {
+		return errors.Wrap(err) // BAD: returns a non-nil error interface when err is nil.
+	}
+	ifNotNilAsError := func(err error) error {
+		return errors.IfNotNil(err) // GOOD: returns a true nil when err is nil.
+	}
+
+	// use a raw '!= nil' comparison rather than assert/require.Nil, which is reflection-aware and would mask exactly
+	// the typed-nil gotcha this test demonstrates - the same comparison a real caller's "if err != nil" would make.
+	require.True(t, wrapAsError(nil) != nil, "demonstrates the typed-nil gotcha that IfNotNil is meant to avoid")
+	require.True(t, ifNotNilAsError(nil) == nil)
+
+	require.True(t, wrapAsError(io.EOF) != nil)
+	require.True(t, ifNotNilAsError(io.EOF) != nil)
+}
+
 func TestIgnore(t *testing.T) {
 	errors.Ignore(nil) // ensure no crash
 
