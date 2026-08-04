@@ -583,6 +583,18 @@ func TestIfNotNil(t *testing.T) {
 		errors.IfNotNil(err, "wrap").Error())
 }
 
+// TestIfNotNil_typedNil is the regression test for a typed-nil error interface (e.g. a nil *Error returned by
+// another function) - a distinct failure mode from the Wrap-as-error case covered by TestIfNotNil_nilInterface.
+// IfNotNil must treat this the same as an untyped nil and return a real nil, not a non-nil *Error with no cause.
+func TestIfNotNil_typedNil(t *testing.T) {
+	var nilErrorPtr *errors.Error
+	assert.Nil(t, errors.IfNotNil(nilErrorPtr))
+	assert.Nil(t, errors.IfNotNil(nilErrorPtr, "op", errors.K.IO))
+
+	var nilStdErr *net.AddrError
+	assert.Nil(t, errors.IfNotNil(nilStdErr))
+}
+
 // TestIfNotNil_nilInterface proves the actual motivation for IfNotNil: Wrap returns *Error, so returning its result
 // from a function declared to return the error interface reintroduces the classic Go typed-nil gotcha, whereas
 // IfNotNil - which returns error and checks for nil before constructing anything - does not. If Wrap is ever changed

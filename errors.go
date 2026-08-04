@@ -971,7 +971,9 @@ func Wrap(err error, args ...interface{}) *Error {
 
 // IfNotNil is a replacement for E() to use whenever err may be nil and the result is returned from a function whose
 // signature declares the error interface rather than *Error. Given the same op/kind/fields grammar as E(), it creates
-// an Error and sets err as its cause, but - unlike E() - returns nil (a real, untyped nil) if err is nil. See also
+// an Error and sets err as its cause, but - unlike E() - returns nil (a real, untyped nil) if err is nil. This also
+// covers a nil err that is a typed nil boxed in a non-nil error interface (e.g. a nil *Error returned by another
+// function) - such a value is treated the same as an untyped nil and never becomes the cause. See also
 // TemplateFn.IfNotNil, which offers the same nil-propagation guarantee for errors created from a Template.
 //
 //	func doSomething() error {
@@ -984,7 +986,7 @@ func Wrap(err error, args ...interface{}) *Error {
 // type - the classic Go typed-nil gotcha. IfNotNil avoids this because it returns error and checks for nil before
 // ever constructing one.
 func IfNotNil(err error, args ...interface{}) error {
-	if err == nil {
+	if err == nil || isNilValue(err) {
 		return nil
 	}
 	return E(args...).WithCause(err).dropStackFrames(1)
