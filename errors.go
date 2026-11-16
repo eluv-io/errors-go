@@ -207,6 +207,15 @@ func (e *Error) unmarshalFrom(f map[orderedKey]valOrMap) {
 	sort.Sort(keys)
 	e.fields.Grow(len(f))
 	for _, key := range keys {
+		if key.key == "cause" {
+			// a cause marshalled by an ErrorArray
+			if arr, ok := f[key].causeArray(); ok {
+				if len(arr.Errors) > 0 {
+					_ = e.WithCause(arr)
+				}
+				continue
+			}
+		}
 		val := f[key].Get()
 		if key.key == "stacktrace" {
 			slice, ok := val.([]interface{})

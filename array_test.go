@@ -43,6 +43,39 @@ func TestErrorArray_JSON(t *testing.T) {
 	require.Empty(t, unmarshalled.Errors.Errors)
 }
 
+func TestErrorArray_JSONNestedCause(t *testing.T) {
+	arr := errors.ErrorArray{}
+	arr.Append(errors.NoTrace("copy", errors.K.Invalid, errors.Append(
+		errors.NoTrace("read", errors.K.Permission, "file", "a.txt",
+			errors.Append(errors.NoTrace("open", errors.K.NotExist), io.ErrUnexpectedEOF)),
+		io.EOF,
+	)))
+
+	bts, err := json.Marshal(arr)
+	require.NoError(t, err)
+	require.Equal(t,
+		`[{"op":"copy","kind":"invalid","cause":[{"op":"read","kind":"permission denied","file":"a.txt",`+
+			`"cause":[{"op":"open","kind":"item does not exist"},"unexpected EOF"]},"EOF"]}]`,
+		string(bts))
+
+	var unmarshalled errors.ErrorArray
+	require.NoError(t, json.Unmarshal(bts, &unmarshalled))
+	require.Len(t, unmarshalled.Errors, 1)
+	cause, ok := errors.Wrap(unmarshalled.Errors[0]).Cause().(*errors.ErrorArray)
+	require.True(t, ok, "a nested array must be decoded as an ErrorArray")
+	require.Len(t, cause.Errors, 2)
+	require.Equal(t, errors.K.Permission, errors.Wrap(cause.Errors[0]).Kind())
+
+	remarshalled, err := json.Marshal(unmarshalled)
+	require.NoError(t, err)
+	require.Equal(t, string(bts), string(remarshalled))
+
+	// an empty array is no cause
+	var e errors.Error
+	require.NoError(t, json.Unmarshal([]byte(`{"op":"copy","cause":[]}`), &e))
+	require.Nil(t, e.Cause())
+}
+
 func TestErrorArray_Append(t *testing.T) {
 	list := func() error {
 		return errors.Append(errors.NoTrace("read", errors.K.IO), io.EOF)
