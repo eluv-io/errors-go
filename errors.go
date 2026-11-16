@@ -683,7 +683,8 @@ func (e *Error) writeKeyVal(b *bytes.Buffer, key interface{}, val interface{}) {
 	b.WriteString("]")
 }
 
-// ClearStacktrace creates a copy of this error and removes the stacktrace from it and all nested causes.
+// ClearStacktrace creates a copy of this error and removes the stacktrace from it and all nested causes, including the
+// errors of a list among them. See the ClearStacktrace function.
 func (e *Error) ClearStacktrace() *Error {
 	clone := *e
 	clone.fields = make([]interface{}, len(e.fields))
@@ -694,9 +695,7 @@ func (e *Error) ClearStacktrace() *Error {
 	clone.fields.Delete("remote_stack")
 	clone.unmarshalledStacktrace = ""
 
-	if e2, ok := clone.cause.(*Error); ok {
-		clone.cause = e2.ClearStacktrace()
-	}
+	clone.cause = ClearStacktrace(clone.cause)
 	return &clone
 }
 
@@ -896,13 +895,37 @@ func UnmarshalJsonErrorList(bts []byte) (ErrorList, error) {
 	return list, err
 }
 
-// ClearStacktrace removes the stacktrace from the given error if it's an instance of *Error. Does nothing otherwise.
+// ClearStacktrace returns a copy of the given error without stacktraces if it's an *Error, an *ErrorList or an
+// *ErrorArray. For an *Error, that includes all nested causes. For a list, it includes all its errors. Any other
+// error is returned unchanged.
 func ClearStacktrace(err error) error {
-	e, ok := err.(*Error)
-	if !ok {
-		return err
+	switch e := err.(type) {
+	case *Error:
+		if e == nil {
+			return err
+		}
+		return e.ClearStacktrace()
+	case *ErrorList:
+		if e == nil {
+			return err
+		}
+		return &ErrorList{Errors: clearStacktraces(e.Errors)}
+	case *ErrorArray:
+		if e == nil {
+			return err
+		}
+		return &ErrorArray{ErrorList: ErrorList{Errors: clearStacktraces(e.Errors)}}
 	}
-	return e.ClearStacktrace()
+	return err
+}
+
+// clearStacktraces returns copies of errs without stacktraces, see ClearStacktrace.
+func clearStacktraces(errs []error) []error {
+	res := make([]error, len(errs))
+	for idx, err := range errs {
+		res[idx] = ClearStacktrace(err)
+	}
+	return res
 }
 
 // ForJSON returns obj in a form that marshals to JSON with its content, the form *Error and *ErrorList use for their
