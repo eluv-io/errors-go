@@ -913,6 +913,17 @@ func ForJSON(obj any) any {
 	return res
 }
 
+// ForJSONArrays returns obj like ForJSON, except that every error list in it marshals as a plain array rather than as
+// an object with an "errors" field. It replaces each *ErrorList with an *ErrorArray: obj itself, the cause of an *Error
+// at any depth and the errors of a list. The errors holding a list are cloned for this, obj itself is not modified. The
+// clones are meant for marshalling.
+func ForJSONArrays(obj any) any {
+	if err, ok := obj.(error); ok {
+		obj, _ = withArrays(err)
+	}
+	return ForJSON(obj)
+}
+
 // Ignore simply ignores a potential error returned by the given function.
 //
 // Useful in defer statements where the deferred function returns an error, i.e.
