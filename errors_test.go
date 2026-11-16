@@ -1018,6 +1018,144 @@ func TestDefaultKind(t *testing.T) {
 	}
 }
 
+// jsonError is an error with its own JSON marshalling.
+type jsonError struct{}
+
+func (jsonError) Error() string                { return "json error" }
+func (jsonError) MarshalJSON() ([]byte, error) { return []byte(`{"custom":true}`), nil }
+
+func TestForJSON(t *testing.T) {
+	list := errors.Append(errors.NoTrace("read", errors.K.IO), io.ErrClosedPipe)
+	tests := []struct {
+		name string
+		obj  any
+		want string
+	}{
+		{"plain error", io.EOF, `"EOF"`},
+		{"error", errors.NoTrace("read", errors.K.IO, io.EOF), `{"op":"read","kind":"I/O error","cause":"EOF"}`},
+		{"error list", list, `{"errors":[{"op":"read","kind":"I/O error"},"io: read/write on closed pipe"]}`},
+		{"own marshalling", jsonError{}, `{"custom":true}`},
+		{"no error", 42, `42`},
+		{"nil", nil, `null`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			bts, err := json.Marshal(errors.ForJSON(test.obj))
+			require.NoError(t, err)
+			require.Equal(t, test.want, string(bts))
+		})
+	}
+}
+
+func TestForJSONArrays(t *testing.T) {
+	list := func() error {
+		return errors.Append(errors.NoTrace("read", errors.K.IO), io.EOF)
+	}
+	listJSON := `[{"op":"read","kind":"I/O error"},"EOF"]`
+	tests := []struct {
+		name    string
+		obj     any
+		want    string
+		hasList bool
+	}{
+		{"list", list(), listJSON, true},
+		{
+			name:    "list cause",
+			obj:     errors.NoTrace("get", errors.K.Invalid, list()),
+			want:    `{"op":"get","kind":"invalid","cause":` + listJSON + `}`,
+			hasList: true,
+		},
+		{
+			name: "list cause of a cause",
+			obj:  errors.NoTrace("get", errors.K.Invalid, errors.NoTrace("fetch", errors.K.NotExist, list())),
+			want: `{"op":"get","kind":"invalid","cause":{"op":"fetch","kind":"item does not exist","cause":` +
+				listJSON + `}}`,
+			hasList: true,
+		},
+		{
+			name:    "list in a list",
+			obj:     errors.Append(errors.NoTrace("get", errors.K.Invalid, list()), io.ErrClosedPipe),
+			want:    `[{"op":"get","kind":"invalid","cause":` + listJSON + `},"io: read/write on closed pipe"]`,
+			hasList: true,
+		},
+		{
+			name:    "list directly in a list",
+			obj:     &errors.ErrorList{Errors: []error{list(), io.ErrClosedPipe}},
+			want:    `[` + listJSON + `,"io: read/write on closed pipe"]`,
+			hasList: true,
+		},
+		{"no list", errors.NoTrace("get", errors.K.Invalid, io.EOF), `{"op":"get","kind":"invalid","cause":"EOF"}`, false},
+		{"plain error", io.EOF, `"EOF"`, false},
+		{"no error", 42, `42`, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			before, err := json.Marshal(test.obj)
+			require.NoError(t, err)
+
+			bts, err := json.Marshal(errors.ForJSONArrays(test.obj))
+			require.NoError(t, err)
+			require.Equal(t, test.want, string(bts))
+
+			after, err := json.Marshal(test.obj)
+			require.NoError(t, err)
+			require.Equal(t, string(before), string(after), "the original must not change")
+			require.Equal(t, test.hasList, strings.Contains(string(after), `"errors":`))
+		})
+	}
+}
+
+func TestClearStacktrace_Lists(t *testing.T) {
+	marshal := func(obj any) string {
+		bts, err := json.Marshal(obj)
+		require.NoError(t, err)
+		return string(bts)
+	}
+	list := func() error {
+		return errors.Append(errors.E("read", errors.K.IO), errors.E("write", errors.K.IO, errors.E("open")))
+	}
+	arr := &errors.ErrorArray{}
+	arr.Append(list())
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{"list", list()},
+		{"array", arr},
+		{"list cause", errors.E("copy", list())},
+		{"list cause of a cause", errors.E("copy", errors.E("get", list()))},
+		{"list in a list", &errors.ErrorList{Errors: []error{errors.E("copy", list()), io.EOF}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			before := marshal(test.err)
+			require.Contains(t, before, `"stacktrace"`)
+
+			cleared := errors.ClearStacktrace(test.err)
+			require.NotContains(t, marshal(cleared), `"stacktrace"`)
+			require.Equal(t, before, marshal(test.err), "the original must not change")
+			require.Equal(t, test.err.Error(), cleared.Error())
+		})
+	}
+}
+
+// TestForJSONArrays_DerivedKind checks that an error without a kind of its own keeps the kind it derives from a list
+// cause when the list becomes an array.
+func TestForJSONArrays_DerivedKind(t *testing.T) {
+	list := errors.Append(errors.NoTrace("read", errors.K.IO), errors.NoTrace("write", errors.K.Permission))
+	err := errors.NoTrace("copy", list)
+
+	kind := func(obj any) any {
+		bts, err := json.Marshal(obj)
+		require.NoError(t, err)
+		var m map[string]any
+		require.NoError(t, json.Unmarshal(bts, &m))
+		return m["kind"]
+	}
+	require.Equal(t, string(errors.K.Permission), kind(err))
+	require.Equal(t, kind(err), kind(errors.ForJSONArrays(err)))
+}
+
 func TestError_UnmarshalJSON(t *testing.T) {
 	doPrintStackTrace := false
 	v := errors.PrintStacktrace

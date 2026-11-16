@@ -32,6 +32,93 @@ func ExampleError() {
 // ExampleIfNotNil demonstrates why IfNotNil exists: a function whose signature returns the error interface must not
 // return the result of Wrap() directly, because Wrap() returns *Error and a nil *Error assigned to an error
 // interface return value is not itself nil. IfNotNil avoids that trap by returning error and checking for nil first.
+// ExampleErrorList shows that an ErrorList marshals as an object holding its errors in an "errors" field, also where
+// it is the cause of an error.
+func ExampleErrorList() {
+	list := errors.Append(
+		errors.NoTrace("copy", errors.K.IO, errors.Append(errors.NoTrace("read", errors.K.IO), io.EOF)),
+		io.ErrShortWrite,
+	)
+
+	bts, err := json.MarshalIndent(list, "", "  ")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(string(bts))
+
+	// Output:
+	//
+	// {
+	//   "errors": [
+	//     {
+	//       "op": "copy",
+	//       "kind": "I/O error",
+	//       "cause": {
+	//         "errors": [
+	//           {
+	//             "op": "read",
+	//             "kind": "I/O error"
+	//           },
+	//           "EOF"
+	//         ]
+	//       }
+	//     },
+	//     "short write"
+	//   ]
+	// }
+}
+
+// ExampleErrorArray shows that an ErrorArray marshals as a plain array of its errors, also where it is the cause of an
+// error. Append converts the lists nested in the appended errors, and ForJSONArrays does the same for any error. The
+// array keeps its form in a struct passed by value.
+func ExampleErrorArray() {
+	list := errors.Append(
+		errors.NoTrace("copy", errors.K.IO, errors.Append(errors.NoTrace("read", errors.K.IO), io.EOF)),
+		io.ErrShortWrite,
+	)
+
+	var arr errors.ErrorArray
+	arr.Append(list)
+
+	var status any = struct {
+		Errors errors.ErrorArray `json:"errors"`
+	}{Errors: arr}
+	bts, err := json.MarshalIndent(status, "", "  ")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(string(bts))
+
+	bts, err = json.Marshal(errors.ForJSONArrays(list))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(string(bts))
+
+	// Output:
+	//
+	// {
+	//   "errors": [
+	//     {
+	//       "op": "copy",
+	//       "kind": "I/O error",
+	//       "cause": [
+	//         {
+	//           "op": "read",
+	//           "kind": "I/O error"
+	//         },
+	//         "EOF"
+	//       ]
+	//     },
+	//     "short write"
+	//   ]
+	// }
+	// [{"op":"copy","kind":"I/O error","cause":[{"op":"read","kind":"I/O error"},"EOF"]},"short write"]
+}
+
 func ExampleIfNotNil() {
 	readFile := func(err error) error {
 		// BUG: even when err is nil, this returns a non-nil error interface, because Wrap returns *Error.

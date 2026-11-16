@@ -40,6 +40,7 @@ func (o ordereKeys) Swap(i, j int) {
 type valOrMap struct {
 	val interface{}
 	m   map[orderedKey]valOrMap
+	arr json.RawMessage // the JSON text of val if it is an array, decoded again for a cause, see causeArray
 }
 
 func (s *valOrMap) UnmarshalJSON(b []byte) error {
@@ -47,7 +48,26 @@ func (s *valOrMap) UnmarshalJSON(b []byte) error {
 	if err == nil {
 		return nil
 	}
-	return json.Unmarshal(b, &s.val)
+	if err = json.Unmarshal(b, &s.val); err != nil {
+		return err
+	}
+	if _, ok := s.val.([]interface{}); ok {
+		s.arr = append(json.RawMessage(nil), b...)
+	}
+	return nil
+}
+
+// causeArray returns the errors of an array, the form an ErrorArray marshals to. Decoding the array again from its
+// JSON text keeps the order of the fields of the errors in it. It returns false if s holds no array.
+func (s valOrMap) causeArray() (*ErrorArray, bool) {
+	if s.arr == nil {
+		return nil, false
+	}
+	arr := &ErrorArray{}
+	if err := arr.UnmarshalJSON(s.arr); err != nil {
+		return nil, false
+	}
+	return arr, true
 }
 
 func (s valOrMap) Get() interface{} {
