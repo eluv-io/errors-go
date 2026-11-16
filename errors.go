@@ -905,6 +905,14 @@ func ClearStacktrace(err error) error {
 	return e.ClearStacktrace()
 }
 
+// ForJSON returns obj in a form that marshals to JSON with its content, the form *Error and *ErrorList use for their
+// causes. An error without its own JSON or text marshalling becomes its message, because encoding/json would marshal
+// it as an empty object. Any other obj is returned unchanged.
+func ForJSON(obj any) any {
+	res, _ := convertForJSONMarshalling(obj)
+	return res
+}
+
 // Ignore simply ignores a potential error returned by the given function.
 //
 // Useful in defer statements where the deferred function returns an error, i.e.

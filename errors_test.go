@@ -1018,6 +1018,35 @@ func TestDefaultKind(t *testing.T) {
 	}
 }
 
+// jsonError is an error with its own JSON marshalling.
+type jsonError struct{}
+
+func (jsonError) Error() string                { return "json error" }
+func (jsonError) MarshalJSON() ([]byte, error) { return []byte(`{"custom":true}`), nil }
+
+func TestForJSON(t *testing.T) {
+	list := errors.Append(errors.NoTrace("read", errors.K.IO), io.ErrClosedPipe)
+	tests := []struct {
+		name string
+		obj  any
+		want string
+	}{
+		{"plain error", io.EOF, `"EOF"`},
+		{"error", errors.NoTrace("read", errors.K.IO, io.EOF), `{"op":"read","kind":"I/O error","cause":"EOF"}`},
+		{"error list", list, `{"errors":[{"op":"read","kind":"I/O error"},"io: read/write on closed pipe"]}`},
+		{"own marshalling", jsonError{}, `{"custom":true}`},
+		{"no error", 42, `42`},
+		{"nil", nil, `null`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			bts, err := json.Marshal(errors.ForJSON(test.obj))
+			require.NoError(t, err)
+			require.Equal(t, test.want, string(bts))
+		})
+	}
+}
+
 func TestError_UnmarshalJSON(t *testing.T) {
 	doPrintStackTrace := false
 	v := errors.PrintStacktrace
